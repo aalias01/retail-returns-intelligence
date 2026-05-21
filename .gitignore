@@ -1,0 +1,54 @@
+# Private local folders — never pushed to GitHub
+# Convention: any folder ending in _local/ is gitignored.
+**/*_local/
+
+# Data files — download instructions in README
+data/raw/
+data/processed/
+*.csv
+*.xlsx
+*.h5
+
+# Exception: runtime.txt pins the Python version for Render deployment
+!runtime.txt
+
+# PowerBI and dashboard artifacts (committed — see dashboards/ folder)
+# dashboards/retail_returns.pbix is intentionally tracked
+
+# Jupyter artifacts
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.venv/
+venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Model artifacts (large binary files — regenerate by running notebooks)
+*.pkl
+*.joblib
+models/
+!models/.gitkeep
+
+# MLflow artifacts (large model binaries inside the tracking store)
+mlflow/mlruns/*/artifacts/
+# Keep the tracking metadata (params, metrics, tags) — small JSON/YAML files
+!mlflow/.gitkeep
+
+# Prefect local storage
+.prefect/

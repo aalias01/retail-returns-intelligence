@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Retail Returns Intelligence</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <h1>Retail Returns Intelligence</h1>
+      <p class="tagline">Return risk scoring · Behavioral anomaly detection · Substitute recommendations</p>
+      <div class="header-links">
+        <a href="https://github.com/aalias01/retail-returns-intelligence" target="_blank">GitHub</a>
+        <a href="https://your-api.onrender.com/docs" target="_blank" id="api-docs-link">API Docs</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- Score a transaction -->
+    <section class="card" id="score-section">
+      <h2>Score a Transaction</h2>
+      <p class="section-desc">
+        Enter a transaction to predict return likelihood, detect behavioral anomalies,
+        and surface the top SHAP factors driving the prediction.
+      </p>
+      <form id="score-form">
+        <div class="form-grid">
+          <label>
+            Customer ID
+            <input type="text" id="customer-id" placeholder="e.g. 12345" required />
+          </label>
+          <label>
+            Invoice No
+            <input type="text" id="invoice-no" placeholder="e.g. 536365" required />
+          </label>
+          <label>
+            Stock Code
+            <input type="text" id="stock-code" placeholder="e.g. 85123A" required />
+          </label>
+          <label>
+            Quantity
+            <input type="number" id="quantity" min="1" value="6" required />
+          </label>
+          <label>
+            Unit Price (£)
+            <input type="number" id="unit-price" min="0" step="0.01" value="2.55" required />
+          </label>
+          <label>
+            Country
+            <input type="text" id="country" value="United Kingdom" />
+          </label>
+        </div>
+        <button type="submit" class="btn-primary">Score Transaction</button>
+      </form>
+    </section>
+
+    <!-- Score results -->
+    <section class="card hidden" id="score-results">
+      <h2>Prediction Results</h2>
+      <div class="results-grid">
+
+        <div class="result-tile" id="return-prob-tile">
+          <div class="tile-label">Return Probability</div>
+          <div class="tile-value" id="return-prob-value">—</div>
+          <div class="risk-badge" id="risk-badge">—</div>
+        </div>
+
+        <div class="result-tile" id="segment-tile">
+          <div class="tile-label">Customer Segment</div>
+          <div class="tile-value segment-chip" id="segment-value">—</div>
+          <div class="tile-sub" id="anomaly-status">—</div>
+        </div>
+
+        <div class="result-tile" id="shap-tile">
+          <div class="tile-label">Top Risk Drivers (SHAP)</div>
+          <div id="shap-bars"></div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- Substitute recommendations -->
+    <section class="card hidden" id="substitutes-section">
+      <h2>Recommended Substitutes</h2>
+      <p class="section-desc">
+        When a return is predicted, offer these alternatives before issuing a refund
+        — convert the return into retained revenue.
+      </p>
+      <div id="substitutes-grid"></div>
+    </section>
+
+    <!-- Customer profile lookup -->
+    <section class="card" id="profile-section">
+      <h2>Customer Profile Lookup</h2>
+      <p class="section-desc">Look up the full behavioral profile for any CustomerID.</p>
+      <form id="profile-form">
+        <div class="form-row">
+          <input type="text" id="profile-customer-id" placeholder="Enter CustomerID" required />
+          <button type="submit" class="btn-secondary">Look Up</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card hidden" id="profile-results">
+      <h2>Behavioral Profile</h2>
+      <div class="profile-grid" id="profile-grid"></div>
+    </section>
+
+    <!-- Methodology -->
+    <section class="card" id="methodology">
+      <h2>How It Works</h2>
+      <div class="method-grid">
+        <div class="method-step">
+          <div class="method-num">1</div>
+          <div class="method-title">Return-Likelihood Classifier</div>
+          <div class="method-desc">LightGBM trained on temporal split (2009–H1 2011 train, H2 2011 test). Features: customer behavioral history + transaction context. Output: P(return) per transaction.</div>
+        </div>
+        <div class="method-step">
+          <div class="method-num">2</div>
+          <div class="method-title">Excessive-Returner Anomaly Detection</div>
+          <div class="method-desc">Isolation Forest on customer-level behavioral features — no labels required. Validates against top-decile return-value-ratio heuristic.</div>
+        </div>
+        <div class="method-step">
+          <div class="method-num">3</div>
+          <div class="method-title">Customer Segmentation</div>
+          <div class="method-desc">KMeans k=4 on RFM + return features. Segments: Premium Loyal · Healthy Browser · At-Risk · Returner. Enables differentiated return policy.</div>
+        </div>
+        <div class="method-step">
+          <div class="method-num">4</div>
+          <div class="method-title">Substitute Recommender</div>
+          <div class="method-desc">Hybrid content (sentence-transformers embeddings) + CF (implicit ALS). NDCG@10 evaluation. Turns return moments into retention opportunities.</div>
+        </div>
+      </div>
+      <div class="method-footer">
+        Dataset: <a href="https://archive.ics.uci.edu/dataset/502/online+retail+ii" target="_blank">UCI Online Retail II</a>
+        · 1,067,371 transactions · Dec 2009–Dec 2011
+        · <a href="https://github.com/aalias01/retail-returns-intelligence" target="_blank">Source code</a>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <p>Built by <a href="https://github.com/aalias01" target="_blank">Alvin Alias</a> · MS Data Science, University of Washington · 2026</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
