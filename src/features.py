@@ -32,12 +32,13 @@ def load_raw(path: str) -> pd.DataFrame:
     df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
     # Standardize key column names
     rename = {
-        "invoice": "invoice_no",
+        "invoice": "invoice_no",       # UCI II uses "Invoice"
         "stockcode": "stock_code",
         "invoicedate": "invoice_date",
-        "unitprice": "unit_price",
+        "price": "unit_price",          # UCI II uses "Price" (not "UnitPrice")
+        "unitprice": "unit_price",      # fallback for older UCI I format
         "customerid": "customer_id",
-        "customer id": "customer_id",
+        "customer id": "customer_id",   # after normalize: "Customer ID" → "customer id"
         "invoiceno": "invoice_no",
     }
     df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
