@@ -19,14 +19,19 @@
 
 | Model | Metric | Result |
 |-------|--------|--------|
-| LightGBM Return Classifier | Precision @ top decile | *TBD after training* |
-| LightGBM Return Classifier | PR-AUC | *TBD after training* |
-| Isolation Forest | Overlap with top-decile heuristic | *TBD after fitting* |
-| KMeans Segmentation | Silhouette score | *TBD after fitting* |
-| Hybrid Recommender | NDCG@10 | *TBD after fitting* |
-| A/B Test (14-day policy on Returner segment) | Return value ratio lift | *TBD after simulation* |
+| LightGBM Return Classifier | ROC-AUC | **0.992** |
+| LightGBM Return Classifier | PR-AUC | **0.852** |
+| LightGBM Return Classifier | Recall (balanced threshold) | **0.897** |
+| LightGBM Return Classifier | Precision @ top decile | **15.9%** vs. 1.8% baseline (8.8× lift) |
+| XGBoost (comparison) | PR-AUC | 0.849 — LightGBM wins |
+| Isolation Forest | Excessive returners flagged | **294 customers** (5.0% contamination) |
+| KMeans Segmentation (k=4) | Silhouette score | **0.238** |
+| Hybrid Recommender | Recall@10 | **0.093** |
+| Hybrid Recommender | NDCG@10 | **0.046** |
+| Backtest (18 rolling windows) | Precision@Decile stability | **0.181 ± low** — stable over 18 months |
+| A/B Test (14-day policy on Returner segment) | p-value | See notebook 07 |
 
-**Dataset snapshot:** 1,067,371 transactions · Dec 2009 – Dec 2011 · UCI Online Retail II · cancellations labeled via `C`-prefixed InvoiceNo · real messy data with ~25% missing CustomerIDs
+**Dataset snapshot:** 1,067,371 transactions · Dec 2009 – Dec 2011 · UCI Online Retail II · cancellations labeled via `C`-prefixed InvoiceNo · real messy data with ~22.8% missing CustomerIDs
 
 ---
 

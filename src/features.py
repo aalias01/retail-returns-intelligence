@@ -44,6 +44,12 @@ def load_raw(path: str) -> pd.DataFrame:
     df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
     df["invoice_date"] = pd.to_datetime(df["invoice_date"])
     df["is_return"] = df["invoice_no"].astype(str).str.startswith("C").astype(int)
+    # Ensure key identifier columns are always strings (UCI II sometimes loads StockCode as int)
+    for col in ("invoice_no", "stock_code", "customer_id"):
+        if col in df.columns:
+            df[col] = df[col].astype(str).str.strip()
+    # Restore NaN for customer_id (str conversion turns NaN → 'nan')
+    df["customer_id"] = df["customer_id"].replace("nan", pd.NA)
     return df
 
 
