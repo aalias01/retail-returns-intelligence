@@ -163,6 +163,14 @@ def predict_anomaly(
 # Model 3 — Customer Segmentation
 # ---------------------------------------------------------------------------
 
+#: Default cluster_id → segment label mapping. KMeans cluster IDs are
+#: arbitrary across re-runs, so this static dict is only a fallback. The
+#: production label assignment is centroid-rule-based and lives in
+#: ``scripts/build_api_artifacts.py`` (``assign_segment_labels``), which
+#: deterministically picks the Returner cluster by max return_value_ratio,
+#: then Premium Loyal by max monetary, then At-Risk by max recency, then
+#: Healthy Browser as the remainder. Re-run that script whenever KMeans
+#: is retrained.
 SEGMENT_LABELS = {
     0: "Premium Loyal",
     1: "Healthy Browser",

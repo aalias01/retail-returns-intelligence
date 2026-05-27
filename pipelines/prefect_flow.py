@@ -191,7 +191,8 @@ def train_segmentation_task(customer_features: pd.DataFrame) -> None:
         mlflow.log_param("k", 4)
 
         model, scaler = train_segmentation(X, k=4)
-        save_model(model, "segmentation")
+        # Filename matches what notebook 06 saves and api/predictor.py loads.
+        save_model(model, "segmentation_kmeans")
         save_model(scaler, "segmentation_scaler")
 
         logger.info("Segmentation model trained and saved.")
@@ -210,7 +211,7 @@ def score_and_persist(
 
     anomaly_model = joblib.load(MODELS_DIR / "anomaly_detector.joblib")
     anomaly_scaler = joblib.load(MODELS_DIR / "anomaly_scaler.joblib")
-    seg_model = joblib.load(MODELS_DIR / "segmentation.joblib")
+    seg_model = joblib.load(MODELS_DIR / "segmentation_kmeans.joblib")
     seg_scaler = joblib.load(MODELS_DIR / "segmentation_scaler.joblib")
 
     feature_cols_anomaly = [

@@ -11,7 +11,7 @@
 
 > **Given 1M+ real UK online retail transactions, identify excessive returners, predict return risk at transaction time, segment customers for differentiated policy, and recommend substitute products to convert returns into retained revenue.**
 
-🔗 **[Live Demo](https://your-project.vercel.app)** &nbsp;|&nbsp; 📡 **[API Docs](https://your-api.onrender.com/docs)** &nbsp;|&nbsp; 📊 **[PowerBI Dashboard](dashboards/retail_returns_dashboard.pdf)**
+🔗 **Live Demo — `[FILL IN — NEEDED BEFORE GITHUB PUSH: Vercel URL]`** &nbsp;|&nbsp; 📡 **API Docs — `[FILL IN — NEEDED BEFORE GITHUB PUSH: Render URL + /docs]`** &nbsp;|&nbsp; 📊 **PowerBI Dashboard — `[FILL IN — dashboard PDF not yet exported]`**
 
 ---
 
@@ -22,14 +22,14 @@
 | LightGBM Return Classifier | ROC-AUC | **0.992** |
 | LightGBM Return Classifier | PR-AUC | **0.852** |
 | LightGBM Return Classifier | Recall (balanced threshold) | **0.897** |
-| LightGBM Return Classifier | Precision @ top decile | **15.9%** vs. 1.8% baseline (8.8× lift) |
+| LightGBM Return Classifier | Precision @ top decile | **15.9%** vs. 1.83% baseline (8.7× lift) |
 | XGBoost (comparison) | PR-AUC | 0.849 — LightGBM wins |
 | Isolation Forest | Excessive returners flagged | **294 customers** (5.0% contamination) |
 | KMeans Segmentation (k=4) | Silhouette score | **0.238** |
 | Hybrid Recommender | Recall@10 | **0.093** |
 | Hybrid Recommender | NDCG@10 | **0.046** |
 | Backtest (18 rolling windows) | Precision@Decile stability | **0.181 ± low** — stable over 18 months |
-| A/B Test (14-day policy on Returner segment) | p-value | See notebook 07 |
+| A/B Test (14-day policy, Returner segment) | Return-value-ratio reduction | **≈6.5%** (spend guardrail intact; effect size, not p-value — see notebook 07) |
 
 **Dataset snapshot:** 1,067,371 transactions · Dec 2009 – Dec 2011 · UCI Online Retail II · cancellations labeled via `C`-prefixed InvoiceNo · real messy data with ~22.8% missing CustomerIDs
 

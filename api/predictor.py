@@ -30,14 +30,16 @@ def load_all_models() -> None:
     """
     import joblib
 
+    # LightGBM (classifier) is tree-based and requires no scaler at inference.
+    # `customer_features` is the scored per-customer table built by
+    # scripts/build_api_artifacts.py — see that script for the merge logic.
     required = [
         "classifier",
-        "classifier_scaler",
         "anomaly_detector",
         "anomaly_scaler",
-        "segmentation",
+        "segmentation_kmeans",
         "segmentation_scaler",
-        "customer_features",  # Precomputed customer feature table (Parquet or joblib)
+        "customer_features",
     ]
     for name in required:
         path = MODELS_DIR / f"{name}.joblib"
@@ -134,7 +136,7 @@ def predict_transaction(
     classifier = _models["classifier"]
     anomaly_model = _models["anomaly_detector"]
     anomaly_scaler = _models["anomaly_scaler"]
-    seg_model = _models["segmentation"]
+    seg_model = _models["segmentation_kmeans"]
     seg_scaler = _models["segmentation_scaler"]
     cust_df: pd.DataFrame = _models["customer_features"]
 

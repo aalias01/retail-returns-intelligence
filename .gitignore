@@ -39,15 +39,34 @@ env/
 .DS_Store
 Thumbs.db
 
-# Model artifacts (large binary files — regenerate by running notebooks)
+# Model artifacts — by default ignore everything under models/, then allow
+# back only the small (~14.5 MB total) runtime artifacts the FastAPI service
+# needs on Render. Regenerate any of these locally by running notebooks 01–10
+# and then `python scripts/build_api_artifacts.py`.
 *.pkl
 *.joblib
-models/
+models/*
 !models/.gitkeep
 
-# MLflow artifacts (large model binaries inside the tracking store)
-mlflow/mlruns/*/artifacts/
-# Keep the tracking metadata (params, metrics, tags) — small JSON/YAML files
+# --- API runtime artifacts (committed so Render can load them at startup) ---
+!models/classifier.joblib
+!models/classifier_meta.json
+!models/anomaly_detector.joblib
+!models/anomaly_scaler.joblib
+!models/segmentation_kmeans.joblib
+!models/segmentation_scaler.joblib
+!models/customer_features.joblib
+!models/product_embeddings.npy
+!models/embedding_stock_codes.joblib
+!models/als_model.joblib
+!models/als_product_index.joblib
+!models/als_customer_index.joblib
+
+# MLflow local tracking store — kept out of git entirely. The run metadata
+# leaks absolute local paths and the OS username, so we don't commit any of
+# it. Instead, capture a screenshot of `mlflow ui` and commit that under
+# figures/ for the README.
+mlflow/mlruns/
 !mlflow/.gitkeep
 
 # Prefect local storage
