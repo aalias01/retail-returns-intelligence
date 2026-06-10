@@ -3,6 +3,16 @@
 
 const API_BASE = "https://your-api.onrender.com";
 
+// Sample customers — one from each segment in the precomputed feature table.
+// Used by the "Try a real customer" buttons; keeps the demo usable without
+// requiring the visitor to know UCI II CustomerIDs.
+const SAMPLE_CUSTOMERS = {
+  premium:  { id: "16684.0", invoice: "536365", stock: "85123A", qty: 6,  price: 2.55 },
+  healthy:  { id: "16333.0", invoice: "536378", stock: "22423", qty: 4,  price: 12.95 },
+  risk:     { id: "15749.0", invoice: "536846", stock: "84879", qty: 8,  price: 1.69 },
+  returner: { id: "18102.0", invoice: "537434", stock: "22086", qty: 12, price: 2.95 },
+};
+
 // ---------------------------------------------------------------------------
 // Utilities
 // ---------------------------------------------------------------------------
@@ -26,11 +36,48 @@ function riskClass(tier) {
 }
 
 // ---------------------------------------------------------------------------
+// Sample customer buttons
+// ---------------------------------------------------------------------------
+
+document.querySelectorAll(".btn-sample").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const sample = SAMPLE_CUSTOMERS[btn.dataset.sample];
+    if (!sample) return;
+    document.getElementById("customer-id").value = sample.id;
+    document.getElementById("invoice-no").value  = sample.invoice;
+    document.getElementById("stock-code").value  = sample.stock;
+    document.getElementById("quantity").value    = sample.qty;
+    document.getElementById("unit-price").value  = sample.price;
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Score a transaction
 // ---------------------------------------------------------------------------
 
+function clearError(rootId) {
+  const root = document.getElementById(rootId);
+  if (!root) return;
+  root.querySelectorAll(".error-msg").forEach((n) => n.remove());
+}
+
+async function fetchWithBackendWakeWarning(url, init) {
+  // Render free tier sleeps after 15 min — show a friendly banner only when
+  // the first request actually stalls (not on every submit).
+  const banner = document.getElementById("connection-banner");
+  const slowTimer = setTimeout(() => banner?.classList.remove("hidden"), 4000);
+  try {
+    const resp = await fetch(url, init);
+    return resp;
+  } finally {
+    clearTimeout(slowTimer);
+    banner?.classList.add("hidden");
+  }
+}
+
 document.getElementById("score-form").addEventListener("submit", async (e) => {
   e.preventDefault();
+  clearError("score-results");
 
   const payload = {
     customer_id: document.getElementById("customer-id").value.trim(),
@@ -48,7 +95,7 @@ document.getElementById("score-form").addEventListener("submit", async (e) => {
   hide("substitutes-section");
 
   try {
-    const resp = await fetch(`${API_BASE}/score`, {
+    const resp = await fetchWithBackendWakeWarning(`${API_BASE}/score`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -67,10 +114,14 @@ document.getElementById("score-form").addEventListener("submit", async (e) => {
       fetchSubstitutes(payload.invoice_no);
     }
   } catch (err) {
+    const friendly = (err.message && /Failed to fetch|NetworkError/i.test(err.message))
+      ? "Couldn't reach the API. If this is the first request in a while, the Render backend may be waking up — give it ~30 s and retry."
+      : err.message;
     show("score-results");
+    clearError("score-results");
     document.getElementById("score-results").querySelector("h2").insertAdjacentHTML(
       "afterend",
-      `<p class="error-msg">Error: ${err.message}</p>`
+      `<p class="error-msg">${friendly}</p>`
     );
   } finally {
     btn.textContent = "Score Transaction";

@@ -27,19 +27,26 @@
         Enter a transaction to predict return likelihood, detect behavioral anomalies,
         and surface the top SHAP factors driving the prediction.
       </p>
+      <div class="sample-row">
+        <span class="sample-label">Try a real customer:</span>
+        <button type="button" class="btn-sample" data-sample="premium">Premium Loyal (16684)</button>
+        <button type="button" class="btn-sample" data-sample="healthy">Healthy Browser (16333)</button>
+        <button type="button" class="btn-sample" data-sample="risk">At-Risk (15749)</button>
+        <button type="button" class="btn-sample" data-sample="returner">Returner (18102)</button>
+      </div>
       <form id="score-form">
         <div class="form-grid">
           <label>
             Customer ID
-            <input type="text" id="customer-id" placeholder="e.g. 12345" required />
+            <input type="text" id="customer-id" placeholder="e.g. 16684" value="16684.0" required />
           </label>
           <label>
             Invoice No
-            <input type="text" id="invoice-no" placeholder="e.g. 536365" required />
+            <input type="text" id="invoice-no" placeholder="e.g. 536365" value="536365" required />
           </label>
           <label>
             Stock Code
-            <input type="text" id="stock-code" placeholder="e.g. 85123A" required />
+            <input type="text" id="stock-code" placeholder="e.g. 85123A" value="85123A" required />
           </label>
           <label>
             Quantity
@@ -56,6 +63,11 @@
         </div>
         <button type="submit" class="btn-primary">Score Transaction</button>
       </form>
+      <div id="connection-banner" class="connection-banner hidden">
+        <strong>Backend waking up.</strong>
+        The API is on Render's free tier and sleeps after 15 min of inactivity.
+        First request can take ~30 s — please retry.
+      </div>
     </section>
 
     <!-- Score results -->

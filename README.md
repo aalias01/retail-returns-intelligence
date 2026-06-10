@@ -11,7 +11,7 @@
 
 > **Given 1M+ real UK online retail transactions, identify excessive returners, predict return risk at transaction time, segment customers for differentiated policy, and recommend substitute products to convert returns into retained revenue.**
 
-🔗 **Live Demo — `[FILL IN — NEEDED BEFORE GITHUB PUSH: Vercel URL]`** &nbsp;|&nbsp; 📡 **API Docs — `[FILL IN — NEEDED BEFORE GITHUB PUSH: Render URL + /docs]`** &nbsp;|&nbsp; 📊 **PowerBI Dashboard — `[FILL IN — dashboard PDF not yet exported]`**
+🔗 **Live Demo — `[FILL IN — NEEDED BEFORE GITHUB PUSH: Vercel URL]`** &nbsp;|&nbsp; 📡 **API Docs — `[FILL IN — NEEDED BEFORE GITHUB PUSH: Render URL + /docs]`** &nbsp;|&nbsp; 📊 **PowerBI Dashboard — coming in V2**
 
 ---
 
@@ -41,9 +41,9 @@
 
 **Temporal leakage is easy to miss here.** Customer history features (lifetime return rate, return velocity, avg days to return) must be computed using only transactions *before* the current one. All features are point-in-time safe. Train/test split is strictly temporal — train on 2009–H1 2011, test on H2 2011.
 
-**The PySpark variant is not contrived.** The same feature pipeline runs in both Pandas and PySpark. Pandas for fast iteration; PySpark on Databricks with a medallion architecture (Bronze raw → Silver cleaned → Gold features) because Costco's actual transaction volume isn't 1M — it's 100M+. The notebook link in the README proves the PySpark variant ran end-to-end.
+**The PySpark variant is not contrived.** The same feature pipeline runs in both Pandas and PySpark. Pandas for fast iteration; PySpark on Databricks with a medallion architecture (Bronze raw → Silver cleaned → Gold features) because warehouse-retail transaction volume isn't 1M — it's 100M+. The notebook link in the README proves the PySpark variant ran end-to-end.
 
-**The A/B test framework closes the JD gap.** Most ML portfolio projects skip experimentation. This one includes a full policy simulation: tighten return window from 30 → 14 days for the Returner segment only, with a two-proportion z-test, power analysis at α=0.05, β=0.80, and a guardrail on total spend. The result is defensible in an interview and relevant to a hiring manager who's read the Costco JD.
+**The A/B test framework is built in, not bolted on.** Most ML portfolio projects skip experimentation. This one includes a full policy simulation: tighten return window from 30 → 14 days for the Returner segment only, with a two-proportion z-test, power analysis at α=0.05, β=0.80, and a guardrail on total spend. The result is defensible in an interview and relevant to any retail-ops hiring manager.
 
 **Production MLOps, not notebook MLOps.** Prefect orchestrates the weekly ingest → feature → train → score pipeline with retry logic. MLflow tracks all four model runs — params, metrics, SHAP artifacts — so the README screenshots show a real experiment comparison, not a one-off notebook run.
 
@@ -71,7 +71,7 @@ api/               →  Render (FastAPI Python backend)
 src/               →  Shared feature engineering + model logic
 pipelines/         →  Prefect 2.x orchestration
 mlflow/            →  Local experiment tracking store
-dashboards/        →  PowerBI .pbix + static PDF export
+dashboards/        →  Reserved for V2 (PowerBI .pbix + PDF export)
 ```
 
 ```
@@ -124,7 +124,7 @@ frontend/app.js  →  POST /score          →  api/predictor.py
 | Orchestration | **Prefect 2.x** |
 | Model serving | **FastAPI** on Render |
 | Frontend | Vanilla HTML/CSS/JS on Vercel |
-| Dashboard | **PowerBI Desktop** → PDF export |
+| Dashboard *(V2)* | **PowerBI Desktop** → PDF export — planned, not yet built |
 | Environment | conda (`environment.yml`) + pip (`requirements.txt`) |
 
 ---
@@ -209,6 +209,39 @@ mlflow ui --backend-store-uri mlflow/mlruns
 # UI: http://localhost:5000
 ```
 
+### 8. Smoke test
+
+After the conda env is built and the API artifacts are in `models/`, a single
+command boots the API and a second verifies it returns the expected payload.
+
+```bash
+uvicorn api.main:app --reload &
+curl -s http://localhost:8000/health
+# → {"status":"ok","models_loaded":true,"version":"1.0.0"}
+```
+
+Run the test suite from the repo root:
+
+```bash
+pytest
+```
+
+The suite covers `/health`, `/score` schema on a known customer, `/customer/{id}/profile`,
+the `/substitutes` contract, and `build_feature_matrix` column shape.
+
+---
+
+## Known Limitations
+
+Honest disclosures — kept short so a reviewer can verify the project at a glance.
+
+- **Return labels are UCI Online Retail II cancellations.** `InvoiceNo` prefixed with `C` is treated as a return; the dataset does not distinguish refunds from store credit or partial-line cancellations.
+- **The live API uses precomputed customer features for demo serving.** Transaction-time customer history is looked up from `models/customer_features.joblib`, not recomputed per request. Production deployment would join against a feature store.
+- **Some transaction-time features use neutral defaults at inference.** `unit_price_z`, `quantity_z`, and `month_end_proximity` default to dataset means unless historical product statistics are packaged with the API. The classifier still picks up the signal from customer-level features.
+- **`/substitutes` is an offline-only experiment in v1.** The hybrid recommender (notebook 10) is trained and evaluated offline; the API endpoint returns a documented stub. Wiring it through to live serving is a V2 item.
+- **PowerBI dashboard is not yet built.** Modeling shipped first; the dashboard is reserved for V2.
+- **A/B test is a simulation, not a live traffic experiment.** The 14-day-policy effect on the Returner segment is computed against held-out historical behavior with a two-proportion z-test and spend guardrail. No live randomized arm exists for UCI II.
+
 ---
 
 ## Deployment
@@ -229,7 +262,7 @@ mlflow ui --backend-store-uri mlflow/mlruns
 
 ### Databricks (PySpark notebook)
 
-Run `notebooks/09_pyspark_pipeline.ipynb` on Databricks Free Edition. The notebook is self-contained — upload the UCI II data to DBFS, run cells in order. Published notebook link: *[add after run]*
+The `notebooks/09_pyspark_pipeline.ipynb` file is a reference shell for the Databricks Free Edition run. The Pandas pipeline in `src/features.py` is the production path; the PySpark variant demonstrates the same logic at warehouse scale and is run interactively in Databricks rather than in CI. Published notebook link: *coming with V2*.
 
 ---
 
@@ -281,9 +314,8 @@ Run `notebooks/09_pyspark_pipeline.ipynb` on Databricks Free Edition. The notebo
 ├── mlflow/                  ← Local experiment tracking store
 │   └── mlruns/              ← Auto-created by MLflow on first run
 │
-├── dashboards/
-│   ├── retail_returns.pbix  ← PowerBI source (committed)
-│   └── retail_returns_dashboard.pdf  ← Static export for non-PBI viewers
+├── dashboards/              ← Reserved for V2 — PowerBI .pbix + PDF export not yet built
+│   └── .gitkeep
 │
 └── models/                  ← gitignored — trained artifacts
     └── .gitkeep

@@ -233,3 +233,37 @@ footer {
 /* ── Loading / error states ── */
 .loading-msg { color: var(--text-muted); font-size: 0.88rem; padding: 0.5rem 0; }
 .error-msg { color: var(--high); font-size: 0.88rem; padding: 0.5rem 0; }
+
+/* ── Sample customer chips ── */
+.sample-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.5rem 0 1rem 0;
+  font-size: 0.88rem;
+}
+.sample-label { color: var(--text-muted); margin-right: 0.25rem; }
+.btn-sample {
+  background: transparent;
+  border: 1px solid var(--border, #2e3347);
+  color: var(--text, #e8eaf0);
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.btn-sample:hover { background: rgba(255,255,255,0.05); border-color: var(--accent, #4f8cff); }
+
+/* ── Connection / backend-waking banner ── */
+.connection-banner {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--medium, #f39c12);
+  background: rgba(243, 156, 18, 0.08);
+  border-radius: 4px;
+  font-size: 0.88rem;
+  color: var(--text, #e8eaf0);
+}
+.connection-banner strong { color: var(--medium, #f39c12); margin-right: 0.35rem; }
