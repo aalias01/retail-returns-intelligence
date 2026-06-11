@@ -1,7 +1,7 @@
 // app.js — Retail Returns Intelligence frontend
 // Update API_BASE to your Render URL after deployment.
 
-const API_BASE = "https://your-api.onrender.com";
+const API_BASE = "https://retail-returns-api.onrender.com";
 
 // Sample customers — one from each segment in the precomputed feature table.
 // Used by the "Try a real customer" buttons; keeps the demo usable without
