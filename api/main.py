@@ -63,7 +63,8 @@ app.add_middleware(
         "http://localhost:5500",     # VS Code Live Server
         "http://localhost:3000",
         "http://127.0.0.1:5500",
-        "https://retail-returns-intelligence.vercel.app",
+        "https://returns.alvinalias.com",           # canonical demo (Primary)
+        "https://retail-returns-intelligence.vercel.app",  # legacy, 308-redirects to subdomain
     ],
     allow_credentials=True,
     allow_methods=["*"],

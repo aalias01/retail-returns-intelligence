@@ -11,7 +11,7 @@
 
 > **Given 1M+ real UK online retail transactions, identify excessive returners, predict return risk at transaction time, segment customers for differentiated policy, and recommend substitute products to convert returns into retained revenue.**
 
-🔗 **[Live Demo](https://retail-returns-intelligence.vercel.app)** &nbsp;|&nbsp; 📡 **[API Docs](https://retail-returns-api.onrender.com/docs)** &nbsp;|&nbsp; 📊 **PowerBI Dashboard — coming in V2**
+🔗 **[Live Demo](https://returns.alvinalias.com)** &nbsp;|&nbsp; 📡 **[API Docs](https://retail-returns-api.onrender.com/docs)** &nbsp;|&nbsp; 📊 **PowerBI Dashboard — coming in V2**
 
 ---
 
