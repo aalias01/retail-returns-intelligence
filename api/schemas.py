@@ -1,15 +1,14 @@
 """
-api/schemas.py — Pydantic request/response models for Retail Returns Intelligence API.
+api/schemas.py - Pydantic request/response models for Retail Returns Intelligence API.
 """
 
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
-from typing import Optional
 
 
 # ---------------------------------------------------------------------------
-# /score — score a single transaction
+# /score: score a single transaction
 # ---------------------------------------------------------------------------
 
 class TransactionScoreRequest(BaseModel):
@@ -50,7 +49,7 @@ class TransactionScoreResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# /customer/{customer_id}/profile — full behavioral profile
+# /customer/{customer_id}/profile: full behavioral profile
 # ---------------------------------------------------------------------------
 
 class CustomerProfileResponse(BaseModel):
@@ -69,7 +68,7 @@ class CustomerProfileResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# /substitutes/{invoice_no} — substitute product recommendations
+# /substitutes/{invoice_no}: substitute product recommendations
 # ---------------------------------------------------------------------------
 
 class SubstituteItem(BaseModel):
@@ -94,4 +93,5 @@ class SubstitutesResponse(BaseModel):
 class HealthResponse(BaseModel):
     status: str
     models_loaded: bool
+    risk_tiers: dict[str, float] | None = None
     version: str = "1.0.0"

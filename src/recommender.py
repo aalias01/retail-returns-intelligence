@@ -1,5 +1,5 @@
 """
-src/recommender.py — Substitute Product Recommender (Model 4).
+src/recommender.py - Substitute Product Recommender (Model 4).
 
 Hybrid approach:
   - Content track: sentence-transformers embeddings on product Description text
@@ -18,7 +18,6 @@ import numpy as np
 import pandas as pd
 import joblib
 from pathlib import Path
-from typing import Any
 
 import scipy.sparse as sp
 from sentence_transformers import SentenceTransformer

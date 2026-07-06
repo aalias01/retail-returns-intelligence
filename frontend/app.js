@@ -1,333 +1,748 @@
-// ============================================================
-// app.js — Retail Returns Intelligence frontend
-// API wiring (endpoints, payload, response shape) is unchanged from v1.
-// Everything else is presentation polish.
-// ============================================================
-
 const API_BASE = "https://retail-returns-api.onrender.com";
+const WARMUP_LIMIT_SECONDS = 60;
+const WARMUP_GRACE_MS = 2500;
+const WARMUP_RETIRE_MS = 4000;
+const WARMUP_STRINGS = {
+  wake: "> server was asleep · sent the wake call",
+  estimate: "> warm-up estimate counting · this is an estimate, not progress",
+  estimateLabel: "estimated seconds to warm",
+  ready: "ready",
+  measured: (seconds) => `> awake · measured wake time ${seconds} s`,
+  overrunLabel: "seconds elapsed · still starting",
+  overrun: "> past the usual window · still waiting, counting up honestly",
+};
+const LOCAL_WARMUP_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
-const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-// Sample customers — one per segment in the precomputed feature table.
 const SAMPLE_CUSTOMERS = {
-  premium:  { id: "16684.0", invoice: "536365", stock: "85123A", qty: 6,  price: 2.55 },
-  healthy:  { id: "16333.0", invoice: "536378", stock: "22423",  qty: 4,  price: 12.95 },
-  risk:     { id: "15749.0", invoice: "536846", stock: "84879",  qty: 8,  price: 1.69 },
-  returner: { id: "18102.0", invoice: "537434", stock: "22086",  qty: 12, price: 2.95 },
+  note: "Copied from retail frontend app.js SAMPLE_CUSTOMERS, one per real KMeans segment. No transaction-level ground truth exists; the cross-check is GET /customer/{id}/profile.",
+  customers: {
+    premium: {
+      id: "16684.0",
+      invoice: "536365",
+      stock: "85123A",
+      qty: 6,
+      price: 2.55,
+      segment_label: "Premium loyal",
+    },
+    healthy: {
+      id: "16333.0",
+      invoice: "536378",
+      stock: "22423",
+      qty: 4,
+      price: 12.95,
+      segment_label: "Healthy browser",
+    },
+    risk: {
+      id: "15749.0",
+      invoice: "536846",
+      stock: "84879",
+      qty: 8,
+      price: 1.69,
+      segment_label: "At risk",
+    },
+    returner: {
+      id: "18102.0",
+      invoice: "537434",
+      stock: "22086",
+      qty: 12,
+      price: 2.95,
+      segment_label: "Returner",
+    },
+  },
 };
 
-// ── Utilities ─────────────────────────────────────────────
+const sampleOrder = ["premium", "healthy", "risk", "returner"];
+let nextSampleIndex = 0;
+let riskTiers = null;
+let healthWarmMeter = null;
+let scoreWarmMeter = null;
+
+const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  || (
+    LOCAL_WARMUP_HOSTS.has(window.location.hostname)
+    && new URLSearchParams(window.location.search).get("motion") === "reduce"
+  );
 const $ = (id) => document.getElementById(id);
-function show(el) { (typeof el === "string" ? $(el) : el)?.classList.remove("hidden"); }
-function hide(el) { (typeof el === "string" ? $(el) : el)?.classList.add("hidden"); }
-function reveal(el) { const n = typeof el === "string" ? $(el) : el; if (n) { n.classList.remove("hidden"); n.classList.add("is-visible"); } }
 
-function segmentClass(segment) {
+function show(id) {
+  $(id)?.classList.remove("hidden");
+}
+
+function hide(id) {
+  $(id)?.classList.add("hidden");
+}
+
+function formatSeconds(ms) {
+  return (ms / 1000).toFixed(2);
+}
+
+function formatWakeSeconds(ms) {
+  const seconds = ms / 1000;
+  if (seconds < 10) return seconds.toFixed(2);
+  if (seconds < 60) return seconds.toFixed(1).replace(/\.0$/, "");
+  return String(Math.round(seconds));
+}
+
+function isLocalWarmupStub() {
+  return LOCAL_WARMUP_HOSTS.has(window.location.hostname);
+}
+
+function detailText(detail) {
+  if (Array.isArray(detail)) return JSON.stringify(detail);
+  if (detail && typeof detail === "object") return JSON.stringify(detail);
+  return String(detail || "HTTP error");
+}
+
+function ensureWarmScale(element) {
+  const scale = element.querySelector("[data-warm-scale]");
+  if (!scale || scale.querySelector("svg")) return;
+
+  const width = 360;
+  const x0 = 12;
+  const x1 = 348;
+  const y = 34;
+  const toX = (seconds) => x0 + (x1 - x0) * (seconds / WARMUP_LIMIT_SECONDS);
+  const minor = Array.from({ length: 13 }, (_, index) => index * 5);
+  const major = [0, 15, 30, 45, 60];
+
+  const ticks = minor.map((seconds) => {
+    const isMajor = major.includes(seconds);
+    const tickY = isMajor ? y + 12 : y + 7;
+    return `<line class="warm-scale-tick" x1="${toX(seconds)}" y1="${y}" x2="${toX(seconds)}" y2="${tickY}"></line>`;
+  }).join("");
+
+  const labels = major.map((seconds) => (
+    `<text class="warm-scale-number" x="${toX(seconds)}" y="${y + 29}" text-anchor="middle">${seconds}</text>`
+  )).join("");
+
+  scale.innerHTML = `
+    <svg class="warm-scale" viewBox="0 0 ${width} 76" role="img" aria-label="Warm-up estimate from 0 to 60 seconds">
+      <line class="warm-scale-base" x1="${x0}" y1="${y}" x2="${x1}" y2="${y}"></line>
+      ${ticks}
+      ${labels}
+      <path class="warm-scale-marker" data-warm-marker d="M ${x0} ${y - 3} l -6 -11 h 12 z"></path>
+    </svg>
+  `;
+}
+
+function renderWarmMeter(element, displaySeconds, label, markerSeconds = displaySeconds, overrun = false) {
+  ensureWarmScale(element);
+  const number = element.querySelector("[data-warm-number]");
+  const labelNode = element.querySelector("[data-warm-label]");
+  const marker = element.querySelector("[data-warm-marker]");
+  const svg = element.querySelector(".warm-scale");
+  const x0 = 12;
+  const x1 = 348;
+  const clampedMarker = Math.max(0, Math.min(WARMUP_LIMIT_SECONDS, markerSeconds));
+  const markerX = x0 + (x1 - x0) * (clampedMarker / WARMUP_LIMIT_SECONDS);
+
+  if (number) number.textContent = String(Math.max(0, Math.round(displaySeconds)));
+  if (labelNode) labelNode.textContent = label;
+  if (marker) {
+    marker.style.transform = `translateX(${markerX - x0}px)`;
+    marker.classList.toggle("is-overrun", overrun);
+  }
+  if (svg) {
+    svg.setAttribute("aria-label", `${label}, ${Math.max(0, Math.round(displaySeconds))} seconds`);
+  }
+}
+
+function createWarmMeter(element) {
+  let startedAt = 0;
+  let visible = false;
+  let complete = false;
+  let overrunLogged = false;
+  let tickTimer = null;
+  let graceTimer = null;
+  let retireTimer = null;
+  let retireDelayTimer = null;
+  let emitLine = () => {};
+  let interactionHandler = null;
+
+  function writeMeterLog(lines) {
+    const log = element.querySelector("[data-warm-log]");
+    if (log) log.textContent = Array.isArray(lines) ? lines.join("\n") : lines;
+  }
+
+  function clearRetireHooks() {
+    clearTimeout(retireTimer);
+    clearTimeout(retireDelayTimer);
+    retireTimer = null;
+    retireDelayTimer = null;
+    if (interactionHandler) {
+      window.removeEventListener("pointerdown", interactionHandler);
+      window.removeEventListener("keydown", interactionHandler);
+      interactionHandler = null;
+    }
+  }
+
+  function hideMeter() {
+    clearRetireHooks();
+    element.classList.add("hidden");
+    element.classList.remove("is-retiring", "is-overrun");
+    visible = false;
+  }
+
+  function reset() {
+    clearTimeout(graceTimer);
+    clearInterval(tickTimer);
+    graceTimer = null;
+    tickTimer = null;
+    complete = false;
+    overrunLogged = false;
+    hideMeter();
+  }
+
+  function emit(text) {
+    if (typeof emitLine === "function") emitLine(text);
+  }
+
+  function renderTick() {
+    const elapsedSeconds = Math.floor((performance.now() - startedAt) / 1000);
+    if (elapsedSeconds >= WARMUP_LIMIT_SECONDS) {
+      element.classList.add("is-overrun");
+      renderWarmMeter(element, elapsedSeconds, WARMUP_STRINGS.overrunLabel, 0, true);
+      writeMeterLog(WARMUP_STRINGS.overrun);
+      if (!overrunLogged) {
+        overrunLogged = true;
+      }
+      return;
+    }
+
+    const remaining = WARMUP_LIMIT_SECONDS - elapsedSeconds;
+    element.classList.remove("is-overrun");
+    renderWarmMeter(element, remaining, WARMUP_STRINGS.estimateLabel, remaining, false);
+    writeMeterLog([WARMUP_STRINGS.wake, WARMUP_STRINGS.estimate]);
+  }
+
+  function reveal() {
+    if (complete || visible) return;
+    visible = true;
+    element.classList.remove("hidden", "is-retiring", "is-overrun");
+    renderTick();
+    tickTimer = setInterval(renderTick, 1000);
+  }
+
+  function retire() {
+    clearRetireHooks();
+    if (reducedMotion) {
+      hideMeter();
+      return;
+    }
+    element.classList.add("is-retiring");
+    retireDelayTimer = setTimeout(hideMeter, 360);
+  }
+
+  function scheduleRetire() {
+    clearRetireHooks();
+    if (reducedMotion) {
+      hideMeter();
+      return;
+    }
+    interactionHandler = retire;
+    window.addEventListener("pointerdown", interactionHandler, { once: true });
+    window.addEventListener("keydown", interactionHandler, { once: true });
+    retireTimer = setTimeout(retire, WARMUP_RETIRE_MS);
+  }
+
+  function start(options = {}) {
+    reset();
+    startedAt = options.startedAt || performance.now();
+    emitLine = typeof options.emitLine === "function" ? options.emitLine : () => {};
+    const elapsedBeforeStart = Math.max(0, performance.now() - startedAt);
+    graceTimer = setTimeout(reveal, Math.max(0, WARMUP_GRACE_MS - elapsedBeforeStart));
+  }
+
+  function markReady(responseAt = performance.now()) {
+    complete = true;
+    clearTimeout(graceTimer);
+    clearInterval(tickTimer);
+    graceTimer = null;
+    tickTimer = null;
+    if (!visible) {
+      hideMeter();
+      return;
+    }
+
+    const measuredLine = WARMUP_STRINGS.measured(formatWakeSeconds(responseAt - startedAt));
+    element.classList.remove("is-overrun");
+    renderWarmMeter(element, 0, WARMUP_STRINGS.ready, 0, false);
+    writeMeterLog(measuredLine);
+    emit(measuredLine);
+    scheduleRetire();
+  }
+
+  function snapshot({ displaySeconds, label, markerSeconds, overrun, lines }, options = {}) {
+    reset();
+    emitLine = typeof options.emitLine === "function" ? options.emitLine : () => {};
+    visible = true;
+    element.classList.remove("hidden", "is-retiring");
+    element.classList.toggle("is-overrun", Boolean(overrun));
+    renderWarmMeter(element, displaySeconds, label, markerSeconds, Boolean(overrun));
+    writeMeterLog(lines);
+    if (options.emit) {
+      const logLines = Array.isArray(lines) ? lines : [lines];
+      logLines.forEach((line) => emit(line));
+    }
+  }
+
   return {
-    "Premium Loyal":   "seg-premium-loyal",
-    "Healthy Browser": "seg-healthy-browser",
-    "At-Risk":         "seg-at-risk",
-    "Returner":        "seg-returner",
-  }[segment] || "";
-}
-function riskClass(tier) { return (tier || "").toLowerCase(); }
-function riskVar(tier) {
-  return tier === "High" ? "var(--high)" : tier === "Medium" ? "var(--medium)" : "var(--low)";
-}
-
-// ── Sticky nav state ──────────────────────────────────────
-const topnav = $("topnav");
-const onScroll = () => topnav.classList.toggle("scrolled", window.scrollY > 12);
-window.addEventListener("scroll", onScroll, { passive: true });
-onScroll();
-
-// ── Scroll-reveal ─────────────────────────────────────────
-const io = new IntersectionObserver((entries) => {
-  entries.forEach((e) => {
-    if (e.isIntersecting) { e.target.classList.add("is-visible"); io.unobserve(e.target); }
-  });
-}, { threshold: 0.12, rootMargin: "0px 0px -8% 0px" });
-document.querySelectorAll(".reveal").forEach((el) => io.observe(el));
-
-// ── Hero metric count-up ──────────────────────────────────
-function countUp(el) {
-  const target = parseFloat(el.dataset.count);
-  const decimals = parseInt(el.dataset.decimals || "0", 10);
-  const suffix = el.dataset.suffix || "";
-  if (REDUCED_MOTION) { el.textContent = target.toFixed(decimals) + suffix; return; }
-  const dur = 1200, t0 = performance.now();
-  const tick = (now) => {
-    const p = Math.min((now - t0) / dur, 1);
-    const eased = 1 - Math.pow(1 - p, 3);
-    el.textContent = (target * eased).toFixed(decimals) + suffix;
-    if (p < 1) requestAnimationFrame(tick);
-    else el.textContent = target.toFixed(decimals) + suffix;
+    start,
+    markReady,
+    cancel: reset,
+    snapshot,
   };
-  requestAnimationFrame(tick);
 }
-document.querySelectorAll(".meta-num").forEach((el, i) => setTimeout(() => countUp(el), 250 + i * 120));
 
-// ── API health warm-up ping (also wakes the Render dyno) ──
+function setShop(shop) {
+  const next = shop === "night" ? "night" : "day";
+  document.documentElement.setAttribute("data-theme", next);
+  document.cookie = `shop=${encodeURIComponent(next)}; Domain=.alvinalias.com; Path=/; Max-Age=31536000; SameSite=Lax`;
+  try { localStorage.setItem("shop", next); } catch (error) {}
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", next === "night" ? "#201f1c" : "#f5f4ef");
+  const toggle = $("shop-toggle");
+  if (toggle) {
+    toggle.setAttribute("aria-pressed", next === "night" ? "true" : "false");
+    toggle.setAttribute("aria-label", next === "night" ? "Use day shop" : "Use night shop");
+  }
+}
+
+function currentShop() {
+  return document.documentElement.getAttribute("data-theme") === "night" ? "night" : "day";
+}
+
+$("shop-toggle")?.addEventListener("click", () => {
+  setShop(currentShop() === "night" ? "day" : "night");
+});
+setShop(currentShop());
+
+function renderScale(value = null) {
+  const width = 720;
+  const x0 = 42;
+  const x1 = 678;
+  const y = 62;
+  const toX = (v) => x0 + (x1 - x0) * v;
+  const major = [0, 0.25, 0.5, 0.75, 1];
+  const minor = Array.from({ length: 21 }, (_, i) => i / 20);
+  const markerX = value === null ? toX(0) : toX(Math.max(0, Math.min(1, value)));
+  const high = riskTiers && typeof riskTiers.high === "number" ? riskTiers.high : null;
+
+  const ticks = minor.map((v) => {
+    const isMajor = major.includes(v);
+    const tickY = isMajor ? y + 13 : y + 8;
+    return `<line class="scale-tick" x1="${toX(v)}" y1="${y}" x2="${toX(v)}" y2="${tickY}"></line>`;
+  }).join("");
+
+  const labels = major.map((v) => (
+    `<text class="scale-number" x="${toX(v)}" y="${y + 31}" text-anchor="middle">${v.toFixed(v === 0 || v === 1 ? 0 : 2)}</text>`
+  )).join("");
+
+  const limit = high === null ? "" : `
+    <line class="scale-limit" x1="${toX(high)}" y1="${y - 28}" x2="${toX(high)}" y2="${y + 16}"></line>
+    <text class="scale-label" x="${toX(high)}" y="${y - 34}" text-anchor="middle">high tier</text>
+  `;
+
+  const marker = value === null ? "" : `
+    <path class="scale-marker" d="M ${markerX} ${y - 18} l -8 -12 h 16 z"></path>
+  `;
+
+  $("scale-wrap").innerHTML = `
+    <svg class="risk-scale" viewBox="0 0 ${width} 132" role="img" aria-label="Return probability from 0 to 1">
+      <line class="scale-base" x1="${x0}" y1="${y}" x2="${x1}" y2="${y}"></line>
+      ${ticks}
+      ${labels}
+      ${limit}
+      ${marker}
+    </svg>
+  `;
+}
+
+renderScale();
+
+healthWarmMeter = createWarmMeter($("health-warm-meter"));
+scoreWarmMeter = createWarmMeter($("score-warm-meter"));
+
 async function pingHealth() {
-  const wrap = $("api-status"), txt = $("api-status-text");
-  if (!wrap) return;
-  wrap.classList.add("waking");
-  txt.textContent = "Waking the API…";
-  const ctrl = new AbortController();
-  const to = setTimeout(() => ctrl.abort(), 35000);
+  const status = $("status-line");
+  const startedAt = performance.now();
+  status.textContent = "server waking, first score can take a minute";
+  healthWarmMeter.start({ startedAt });
   try {
-    const r = await fetch(`${API_BASE}/health`, { signal: ctrl.signal });
-    clearTimeout(to);
-    const data = await r.json().catch(() => ({}));
-    wrap.classList.remove("waking");
-    if (r.ok && data.models_loaded) {
-      wrap.classList.add("online");
-      txt.textContent = "API online · models loaded";
-    } else if (r.ok) {
-      wrap.classList.add("online");
-      txt.textContent = "API online";
+    const response = await fetch(`${API_BASE}/health`);
+    const responseAt = performance.now();
+    if (response.ok) healthWarmMeter.markReady(responseAt);
+    const data = await response.json().catch(() => ({}));
+    if (data && data.risk_tiers) {
+      riskTiers = data.risk_tiers;
+      renderScale();
+    }
+    if (response.ok && data.models_loaded) {
+      status.textContent = "models loaded";
     } else {
-      wrap.classList.add("offline");
-      txt.textContent = "API reachable · degraded";
+      status.textContent = "server waking, first score can take a minute";
     }
-  } catch (_) {
-    clearTimeout(to);
-    wrap.classList.remove("waking");
-    wrap.classList.add("offline");
-    txt.textContent = "API asleep — your first score will wake it (~30 s)";
+  } catch (error) {
+    healthWarmMeter.cancel();
+    status.textContent = "server unreachable right now";
   }
 }
-pingHealth();
 
-// ── Sample customer buttons ───────────────────────────────
-document.querySelectorAll(".btn-sample").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    const s = SAMPLE_CUSTOMERS[btn.dataset.sample];
-    if (!s) return;
-    $("customer-id").value = s.id;
-    $("invoice-no").value  = s.invoice;
-    $("stock-code").value  = s.stock;
-    $("quantity").value    = s.qty;
-    $("unit-price").value  = s.price;
-    document.querySelectorAll(".btn-sample").forEach((b) => b.style.borderColor = "");
-    btn.style.borderColor = "var(--brand)";
+function runWarmupStub() {
+  if (!isLocalWarmupStub()) return false;
+
+  const mode = new URLSearchParams(window.location.search).get("warmup");
+  if (!mode) return false;
+
+  const useScoreMeter = mode.startsWith("score-");
+  const meter = useScoreMeter ? scoreWarmMeter : healthWarmMeter;
+  const emitLine = useScoreMeter ? logLine : () => {};
+
+  $("status-line").textContent = useScoreMeter ? "models loaded" : "server waking, first score can take a minute";
+
+  if (mode.endsWith("-warm")) {
+    meter.start({ startedAt: performance.now(), emitLine });
+    setTimeout(() => meter.markReady(performance.now()), 50);
+    return true;
+  }
+
+  if (mode.endsWith("-reduced-ready")) {
+    meter.start({ startedAt: performance.now() - 3000, emitLine });
+    setTimeout(() => meter.markReady(performance.now()), 50);
+    return true;
+  }
+
+  if (mode.endsWith("-counting")) {
+    meter.snapshot({
+      displaySeconds: 38,
+      label: WARMUP_STRINGS.estimateLabel,
+      markerSeconds: 38,
+      overrun: false,
+      lines: [WARMUP_STRINGS.wake, WARMUP_STRINGS.estimate],
+    }, { emitLine });
+    return true;
+  }
+
+  if (mode.endsWith("-ready")) {
+    meter.snapshot({
+      displaySeconds: 0,
+      label: WARMUP_STRINGS.ready,
+      markerSeconds: 0,
+      overrun: false,
+      lines: WARMUP_STRINGS.measured("14"),
+    }, { emitLine, emit: useScoreMeter });
+    return true;
+  }
+
+  if (mode.endsWith("-overrun")) {
+    meter.snapshot({
+      displaySeconds: 73,
+      label: WARMUP_STRINGS.overrunLabel,
+      markerSeconds: 0,
+      overrun: true,
+      lines: WARMUP_STRINGS.overrun,
+    }, { emitLine });
+    return true;
+  }
+
+  return false;
+}
+
+if (!runWarmupStub()) {
+  pingHealth();
+}
+
+function setLedger(sampleKey) {
+  const sample = SAMPLE_CUSTOMERS.customers[sampleKey];
+  if (!sample) return null;
+  $("customer-id").value = sample.id;
+  $("invoice-no").value = sample.invoice;
+  $("stock-code").value = sample.stock;
+  $("quantity").value = sample.qty;
+  $("unit-price").value = sample.price;
+  $("country").value = "United Kingdom";
+
+  document.querySelectorAll(".chip").forEach((chip) => {
+    chip.setAttribute("aria-pressed", chip.dataset.sample === sampleKey ? "true" : "false");
   });
+  return sample;
+}
+
+document.querySelectorAll(".chip").forEach((chip) => {
+  chip.setAttribute("aria-pressed", "false");
+  chip.addEventListener("click", () => setLedger(chip.dataset.sample));
 });
+setLedger("premium");
 
-// ── Backend wake banner helper ────────────────────────────
-async function fetchWithBackendWakeWarning(url, init) {
-  const banner = $("connection-banner");
-  const slowTimer = setTimeout(() => banner?.classList.remove("hidden"), 4000);
-  try {
-    return await fetch(url, init);
-  } finally {
-    clearTimeout(slowTimer);
-    banner?.classList.add("hidden");
+function logLine(text) {
+  const item = document.createElement("li");
+  item.textContent = text;
+  $("run-log").appendChild(item);
+}
+
+function clearRunState(options = {}) {
+  if (!options.keepLog) {
+    $("run-log").innerHTML = "";
   }
-}
-
-function showResultsError(msg) {
-  hide("results-body");
-  const empty = $("results-empty");
-  show(empty);
-  empty.innerHTML =
-    `<div class="empty-ring" style="border-color:rgba(239,68,68,0.5)"></div>` +
-    `<p style="color:var(--high);max-width:30ch">${msg}</p>`;
-}
-
-// ── Score a transaction ───────────────────────────────────
-$("score-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-
-  const payload = {
-    customer_id: $("customer-id").value.trim(),
-    invoice_no:  $("invoice-no").value.trim(),
-    stock_code:  $("stock-code").value.trim(),
-    quantity:    parseFloat($("quantity").value),
-    unit_price:  parseFloat($("unit-price").value),
-    country:     $("country").value.trim() || "United Kingdom",
-  };
-
-  const btn = e.target.querySelector("button[type=submit]");
-  btn.textContent = "Scoring…";
-  btn.disabled = true;
+  scoreWarmMeter.cancel();
+  hide("error-box");
+  hide("deflection-section");
   hide("substitutes-section");
+  hide("anomaly-line");
+  $("error-message").textContent = "";
+  $("error-detail").textContent = "";
+}
+
+function payloadFromLedger() {
+  return {
+    customer_id: $("customer-id").value.trim(),
+    invoice_no: $("invoice-no").value.trim(),
+    stock_code: $("stock-code").value.trim(),
+    quantity: Number.parseFloat($("quantity").value),
+    unit_price: Number.parseFloat($("unit-price").value),
+    country: $("country").value.trim() || "United Kingdom",
+  };
+}
+
+function showScoreError(message, rawDetail = "") {
+  $("error-message").textContent = message;
+  $("error-detail").textContent = rawDetail;
+  show("error-box");
+}
+
+async function scorePayload(payload, onResponse) {
+  const started = performance.now();
+  const response = await fetch(`${API_BASE}/score`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const responseAt = performance.now();
+  if (typeof onResponse === "function") onResponse(responseAt);
+  const elapsed = responseAt - started;
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    const detail = detailText(errorBody.detail || `HTTP ${response.status}`);
+    const error = new Error(detail);
+    error.rawDetail = detail;
+    throw error;
+  }
+  const data = await response.json();
+  data._elapsed = elapsed;
+  return data;
+}
+
+async function runScore(options = {}) {
+  const payload = payloadFromLedger();
+  clearRunState({ keepLog: options.keepLog });
+  const startedAt = performance.now();
+  scoreWarmMeter.start({ startedAt, emitLine: logLine });
+  $("known-run").disabled = true;
+  $("manual-run").disabled = true;
 
   try {
-    const resp = await fetchWithBackendWakeWarning(`${API_BASE}/score`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err.detail || `HTTP ${resp.status}`);
+    const score = await scorePayload(payload, (responseAt) => scoreWarmMeter.markReady(responseAt));
+    logLine(`> scored in ${formatSeconds(score._elapsed)} s`);
+    renderScore(score);
+    logLine("> pulling this customer's history");
+    await fetchAndRenderProfile(payload.customer_id, true);
+    if (score.risk_tier === "High") {
+      await fetchSubstitutes(payload.invoice_no);
     }
-    const data = await resp.json();
-    renderScoreResults(data);
-    if (data.risk_tier === "High") fetchSubstitutes(payload.invoice_no);
-  } catch (err) {
-    const friendly = (err.message && /Failed to fetch|NetworkError|aborted/i.test(err.message))
-      ? "Couldn't reach the API. The Render backend may be waking up — give it ~30 s and retry."
-      : err.message;
-    showResultsError(friendly);
+  } catch (error) {
+    scoreWarmMeter.cancel();
+    const network = error instanceof TypeError || /fetch|network|aborted/i.test(error.message);
+    if (network) {
+      showScoreError(
+        "This runs on a free tier that sleeps between visitors. First start takes 30 to 60 seconds; runs after that are quick.",
+        "Try again in a moment.",
+      );
+    } else {
+      showScoreError(`Could not score this transaction. ${error.message}`, error.rawDetail || error.message);
+    }
   } finally {
-    btn.textContent = "Score Transaction";
-    btn.disabled = false;
+    $("known-run").disabled = false;
+    $("manual-run").disabled = false;
   }
+}
+
+$("known-run").addEventListener("click", async () => {
+  const key = sampleOrder[nextSampleIndex];
+  nextSampleIndex = (nextSampleIndex + 1) % sampleOrder.length;
+  const sample = setLedger(key);
+  clearRunState();
+  logLine(`> customer ${sample.id} · ${sample.segment_label} sample loaded`);
+  await runScore({ keepLog: true });
 });
 
-function renderScoreResults(data) {
-  hide("results-empty");
-  show("results-body");
-  const errEl = $("results-body").querySelector(".error-msg");
-  if (errEl) errEl.remove();
+$("score-form").addEventListener("submit", (event) => {
+  event.preventDefault();
+  runScore();
+});
 
-  // Probability + gauge
-  const p = data.return_probability;
-  const probEl = $("return-prob-value");
-  probEl.textContent = (p * 100).toFixed(1) + "%";
-  probEl.style.color = riskVar(data.risk_tier);
-
-  const arc = $("gauge-arc");
-  const len = arc.getTotalLength ? arc.getTotalLength() : 251.3;
-  arc.style.strokeDasharray = len;
-  arc.style.stroke = riskVar(data.risk_tier);
-  // start empty, then animate to fill = p
-  arc.style.strokeDashoffset = len;
-  requestAnimationFrame(() => {
-    arc.style.strokeDashoffset = REDUCED_MOTION ? len * (1 - p) : len * (1 - p);
-  });
-
-  const badge = $("risk-badge");
-  badge.textContent = data.risk_tier + " Risk";
-  badge.className = `risk-badge ${riskClass(data.risk_tier)}`;
-
-  // Segment + anomaly
-  const segEl = $("segment-value");
-  segEl.textContent = data.segment;
-  segEl.className = `segment-chip ${segmentClass(data.segment)}`;
-
-  const anomalyEl = $("anomaly-status");
+function renderScore(data) {
+  const probability = Number(data.return_probability || 0);
+  $("return-probability").textContent = `${(probability * 100).toFixed(1)}%`;
+  $("tier-line").textContent = `${data.risk_tier} risk · ${data.segment} segment`;
   if (data.anomaly_flag === 1) {
-    anomalyEl.innerHTML = "⚠ Flagged as excessive returner";
-    anomalyEl.style.color = "var(--medium)";
+    show("anomaly-line");
   } else {
-    anomalyEl.textContent = "No anomaly detected";
-    anomalyEl.style.color = "var(--text-mut)";
+    hide("anomaly-line");
   }
-
-  renderShapBars(data.top_shap_factors);
+  renderScale(probability);
+  renderDeflection(data.top_shap_factors || []);
 }
 
-function renderShapBars(factors) {
-  const container = $("shap-bars");
-  container.innerHTML = "";
-  if (!factors || factors.length === 0) {
-    container.innerHTML = `<p class="loading-msg" style="color:var(--text-dim);font-size:0.85rem;">SHAP explanations unavailable.</p>`;
-    return;
-  }
-  const maxAbs = Math.max(...factors.map((f) => Math.abs(f.value)), 0.001);
-  factors.forEach((f, i) => {
-    const pct = (Math.abs(f.value) / maxAbs * 100).toFixed(1);
-    const cls = f.direction === "increases" ? "positive" : "negative";
-    const sign = f.direction === "increases" ? "+" : "−";
-    container.insertAdjacentHTML("beforeend", `
-      <div class="shap-row">
-        <span class="shap-label" title="${f.feature}">${f.feature}</span>
-        <div class="shap-bar-track"><div class="shap-bar-fill ${cls}" data-w="${pct}"></div></div>
-        <span class="shap-val">${sign}${Math.abs(f.value).toFixed(3)}</span>
-      </div>`);
-  });
-  // animate widths after paint
-  requestAnimationFrame(() => {
-    container.querySelectorAll(".shap-bar-fill").forEach((el) => {
-      el.style.width = (REDUCED_MOTION ? el.dataset.w : el.dataset.w) + "%";
-    });
-  });
+const featureGloss = {
+  quantity_z: "quantity vs this customer's norm",
+  category_return_rate: "how often this category comes back",
+  monetary_score: "lifetime value",
+  lifetime_return_rate: "lifetime return rate",
+};
+
+function featureLabel(feature) {
+  return featureGloss[feature] || feature.replaceAll("_", " ");
 }
 
-// ── Substitute recommendations ────────────────────────────
+function renderDeflection(factors) {
+  const table = $("deflection-table");
+  table.innerHTML = "";
+  if (!factors.length) return;
+  const maxAbs = Math.max(...factors.map((factor) => Math.abs(Number(factor.value))), 0.001);
+
+  factors.forEach((factor) => {
+    const value = Number(factor.value);
+    const row = document.createElement("div");
+    row.className = "deflection-row";
+
+    const name = document.createElement("span");
+    name.className = "deflection-name";
+    name.textContent = featureLabel(factor.feature);
+    name.title = `API field: top_shap_factors.${factor.feature}`;
+
+    const track = document.createElement("span");
+    track.className = "deflection-track";
+    const bar = document.createElement("span");
+    bar.className = `deflection-bar ${value >= 0 ? "positive" : "negative"}`;
+    bar.style.width = reducedMotion ? `${Math.min(Math.abs(value) / maxAbs * 50, 50)}%` : "0%";
+    track.appendChild(bar);
+
+    const val = document.createElement("span");
+    val.className = "deflection-value";
+    val.textContent = `${value >= 0 ? "+" : ""}${value.toFixed(3)}`;
+
+    row.append(name, track, val);
+    table.appendChild(row);
+    if (!reducedMotion) {
+      requestAnimationFrame(() => {
+        bar.style.width = `${Math.min(Math.abs(value) / maxAbs * 50, 50)}%`;
+      });
+    }
+  });
+  show("deflection-section");
+}
+
+function renderHistory(profile) {
+  hide("history-error");
+  $("anomaly-score-line").textContent = `anomaly score ${Number(profile.anomaly_score || 0).toFixed(4)}`;
+  const fields = [
+    ["Lifetime return rate", `${(Number(profile.lifetime_return_rate || 0) * 100).toFixed(1)}%`],
+    ["Orders", Number(profile.frequency_score || 0).toLocaleString()],
+    ["Tenure", `${Number(profile.tenure_days || 0).toLocaleString()} days`],
+    ["Returns in the last 30 days", Number(profile.return_velocity || 0).toLocaleString()],
+    ["Lifetime value", `£${Number(profile.monetary_score || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}`],
+  ];
+  $("history-grid").innerHTML = fields.map(([label, value]) => `
+    <div class="history-cell">
+      <span>${label}</span>
+      <strong>${value}</strong>
+    </div>
+  `).join("");
+}
+
+async function fetchProfile(customerId) {
+  const response = await fetch(`${API_BASE}/customer/${encodeURIComponent(customerId)}/profile`);
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    throw new Error(detailText(errorBody.detail || `HTTP ${response.status}`));
+  }
+  return response.json();
+}
+
+async function fetchAndRenderProfile(customerId) {
+  try {
+    const profile = await fetchProfile(customerId);
+    renderHistory(profile);
+  } catch (error) {
+    $("history-grid").innerHTML = "";
+    $("anomaly-score-line").textContent = "";
+    $("history-error").textContent = `Could not find this customer. ${error.message}`;
+    show("history-error");
+  }
+}
+
+$("profile-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const customerId = $("profile-customer-id").value.trim();
+  if (!customerId) return;
+  await fetchAndRenderProfile(customerId);
+});
+
 async function fetchSubstitutes(invoiceNo) {
   try {
-    const resp = await fetch(`${API_BASE}/substitutes/${encodeURIComponent(invoiceNo)}`);
-    if (!resp.ok) return;
-    renderSubstitutes(await resp.json());
-  } catch (_) { /* recommender may be offline-only in v1 — silent */ }
+    const response = await fetch(`${API_BASE}/substitutes/${encodeURIComponent(invoiceNo)}`);
+    if (!response.ok) return;
+    renderSubstitutes(await response.json());
+  } catch (error) {
+    return;
+  }
 }
 
 function renderSubstitutes(data) {
-  const container = $("substitutes-grid");
-  container.innerHTML = "";
+  const list = $("substitute-list");
+  list.innerHTML = "";
+  if (data.original_stock_code || data.original_description) {
+    $("original-line").textContent = `Original item ${data.original_stock_code} · ${data.original_description}`;
+    show("original-line");
+  } else {
+    hide("original-line");
+  }
+
   if (!data.substitutes || data.substitutes.length === 0) {
-    container.innerHTML = `<p class="loading-msg" style="color:var(--text-dim);font-size:0.88rem;">No substitutes available yet — recommender is offline-only in v1.</p>`;
-    reveal("substitutes-section");
+    const empty = document.createElement("p");
+    empty.className = "empty-note";
+    empty.textContent = "No substitutes available for this invoice.";
+    list.appendChild(empty);
+    show("substitutes-section");
     return;
   }
-  data.substitutes.forEach((sub, i) => {
-    const warn = sub.in_customer_return_history
-      ? `<p class="sub-return-warning">⚠ Customer has returned this item before</p>` : "";
-    container.insertAdjacentHTML("beforeend", `
-      <div class="substitute-card">
-        <div class="sub-rank">#${i + 1}</div>
-        <div class="sub-info">
-          <div class="sub-code">${sub.stock_code}</div>
-          <div class="sub-desc">${sub.description}</div>
-          <div class="sub-rationale">${sub.rationale}</div>
-          ${warn}
-        </div>
-        <div class="sub-sim">sim ${(sub.content_similarity * 100).toFixed(0)}%</div>
-      </div>`);
-  });
-  reveal("substitutes-section");
-}
 
-// ── Customer profile lookup ───────────────────────────────
-$("profile-form").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const cid = $("profile-customer-id").value.trim();
-  if (!cid) return;
+  data.substitutes.forEach((item) => {
+    const row = document.createElement("div");
+    row.className = "substitute-row";
 
-  const btn = e.target.querySelector("button[type=submit]");
-  btn.textContent = "Loading…";
-  btn.disabled = true;
+    const code = document.createElement("p");
+    code.className = "substitute-code";
+    code.textContent = item.stock_code;
 
-  try {
-    const resp = await fetchWithBackendWakeWarning(`${API_BASE}/customer/${encodeURIComponent(cid)}/profile`);
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err.detail || `HTTP ${resp.status}`);
+    const description = document.createElement("p");
+    description.textContent = item.description || "";
+    if (item.in_customer_return_history) {
+      const warning = document.createElement("span");
+      warning.className = "prior-warning";
+      warning.textContent = "this customer has returned this item before";
+      description.appendChild(warning);
     }
-    renderProfile(await resp.json());
-  } catch (err) {
-    const grid = $("profile-grid");
-    reveal(grid);
-    grid.style.gridTemplateColumns = "1fr";
-    grid.innerHTML = `<p class="error-msg" style="color:var(--high);font-size:0.9rem;">Error: ${err.message}</p>`;
-  } finally {
-    btn.textContent = "Look up";
-    btn.disabled = false;
-  }
-});
 
-function renderProfile(data) {
-  const grid = $("profile-grid");
-  grid.style.gridTemplateColumns = "";
-  const stats = [
-    { label: "Segment",            value: data.segment },
-    { label: "Anomaly Flag",       value: data.anomaly_flag === 1 ? "⚠ Flagged" : "Clean" },
-    { label: "Return Rate",        value: (data.lifetime_return_rate * 100).toFixed(1) + "%" },
-    { label: "Return Value Ratio", value: (data.return_value_ratio * 100).toFixed(1) + "%" },
-    { label: "Return Velocity",    value: data.return_velocity + " (30d)" },
-    { label: "Tenure",             value: data.tenure_days + " days" },
-    { label: "Recency",            value: data.recency_score + " days ago" },
-    { label: "Orders",             value: data.frequency_score },
-    { label: "Lifetime Value",     value: "£" + data.monetary_score.toFixed(2) },
-  ];
-  grid.innerHTML = stats.map((s) => `
-    <div class="profile-stat">
-      <div class="profile-stat-label">${s.label}</div>
-      <div class="profile-stat-value">${s.value}</div>
-    </div>`).join("");
-  reveal(grid);
+    const rationale = document.createElement("p");
+    rationale.textContent = item.rationale || "";
+
+    const similarity = document.createElement("p");
+    similarity.className = "substitute-sim";
+    similarity.textContent = `${(Number(item.content_similarity || 0) * 100).toFixed(0)}% similar`;
+
+    row.append(code, description, rationale, similarity);
+    list.appendChild(row);
+  });
+  show("substitutes-section");
 }

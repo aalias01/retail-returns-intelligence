@@ -1,11 +1,11 @@
 """
-src/models.py — Train, evaluate, save, and load all four models.
+src/models.py - Train, evaluate, save, and load all four models.
 
 Models:
   1. Return-Likelihood Classifier (LightGBM / XGBoost)
   2. Excessive-Returner Anomaly Detector (Isolation Forest)
   3. Customer Segmentation (KMeans)
-  4. Substitute Product Recommender — see src/recommender.py
+  4. Substitute Product Recommender, see src/recommender.py
 """
 
 from __future__ import annotations
@@ -27,7 +27,6 @@ from sklearn.metrics import (
     f1_score,
     roc_auc_score,
     average_precision_score,
-    classification_report,
 )
 
 
@@ -35,7 +34,7 @@ MODELS_DIR = Path("models")
 
 
 # ---------------------------------------------------------------------------
-# Model 1 — Return-Likelihood Classifier
+# Model 1: Return-Likelihood Classifier
 # ---------------------------------------------------------------------------
 
 def train_classifier(
@@ -116,7 +115,7 @@ def get_shap_values(
 
 
 # ---------------------------------------------------------------------------
-# Model 2 — Excessive-Returner Anomaly Detection
+# Model 2: Excessive-Returner Anomaly Detection
 # ---------------------------------------------------------------------------
 
 def train_anomaly_detector(
@@ -160,7 +159,7 @@ def predict_anomaly(
 
 
 # ---------------------------------------------------------------------------
-# Model 3 — Customer Segmentation
+# Model 3: Customer Segmentation
 # ---------------------------------------------------------------------------
 
 #: Default cluster_id → segment label mapping. KMeans cluster IDs are

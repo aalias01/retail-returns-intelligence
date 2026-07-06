@@ -1,5 +1,5 @@
 """
-api/predictor.py — Model loading, inference, and SHAP explanation for Retail Returns API.
+api/predictor.py - Model loading, inference, and SHAP explanation for Retail Returns API.
 
 Loads all four model artifacts at startup (via FastAPI lifespan).
 Provides synchronous inference functions called from api/main.py.
@@ -13,12 +13,13 @@ import shap
 from pathlib import Path
 from typing import Any
 
-from api.schemas import ShapEntry, SubstituteItem
+from api.schemas import ShapEntry
 
 
 MODELS_DIR = Path("models")
+RISK_TIERS = {"high": 0.6, "medium": 0.3}
 
-# Global model store — populated by load_all_models() at startup
+# Global model store, populated by load_all_models() at startup.
 _models: dict[str, Any] = {}
 
 
@@ -26,13 +27,13 @@ def load_all_models() -> None:
     """Load all trained artifacts from models/.
 
     Called once at API startup via FastAPI lifespan. Raises FileNotFoundError
-    if any artifact is missing — run the training notebooks first.
+    if any artifact is missing. Run the training notebooks first.
     """
     import joblib
 
     # LightGBM (classifier) is tree-based and requires no scaler at inference.
     # `customer_features` is the scored per-customer table built by
-    # scripts/build_api_artifacts.py — see that script for the merge logic.
+    # scripts/build_api_artifacts.py has the merge logic.
     required = [
         "classifier",
         "anomaly_detector",
@@ -50,6 +51,8 @@ def load_all_models() -> None:
             )
         _models[name] = joblib.load(path)
 
+    _models["shap_explainer"] = shap.TreeExplainer(_models["classifier"])
+
     # Recommender artifacts
     emb_path = MODELS_DIR / "product_embeddings.npy"
     if emb_path.exists():
@@ -61,6 +64,10 @@ def load_all_models() -> None:
         _models["als_product_index"] = joblib.load(
             MODELS_DIR / "als_product_index.joblib"
         )
+
+    substitutes_path = MODELS_DIR / "invoice_substitutes.joblib"
+    if substitutes_path.exists():
+        _models["invoice_substitutes"] = joblib.load(substitutes_path)
 
 
 def models_loaded() -> bool:
@@ -83,7 +90,7 @@ def _build_transaction_features(
     row = cust_df[cust_df["customer_id"] == customer_id]
 
     if len(row) == 0:
-        # Unknown customer — use neutral defaults
+        # Unknown customer: use neutral defaults.
         cust_feats = {
             "lifetime_return_rate": 0.0,
             "return_value_ratio": 0.0,
@@ -102,7 +109,7 @@ def _build_transaction_features(
     return pd.DataFrame(
         [
             {
-                "unit_price_z": 0.0,  # requires product stats — set to mean at inference
+                "unit_price_z": 0.0,  # requires product stats, set to mean at inference
                 "quantity_z": 0.0,
                 "is_weekend": is_weekend,
                 "month_end_proximity": 15,  # midpoint default
@@ -134,26 +141,26 @@ def predict_transaction(
 ) -> dict:
     """Run all models for a single transaction and return scored response."""
     classifier = _models["classifier"]
-    anomaly_model = _models["anomaly_detector"]
-    anomaly_scaler = _models["anomaly_scaler"]
-    seg_model = _models["segmentation_kmeans"]
-    seg_scaler = _models["segmentation_scaler"]
     cust_df: pd.DataFrame = _models["customer_features"]
 
     X = _build_transaction_features(
         customer_id, stock_code, quantity, unit_price, is_weekend
     )
 
-    # Model 1 — return probability
+    # Model 1: return probability
     return_prob = float(classifier.predict_proba(X)[0, 1])
+    # Three numbers govern different jobs. The 0.6 and 0.3 tier cuts are
+    # display buckets for the live demo. classifier_meta.json keeps the
+    # balanced-precision operating point selected in notebook 04. The README's
+    # top-decile lift is a ranking claim, not a single operating threshold.
     risk_tier = (
-        "High" if return_prob >= 0.6
-        else "Medium" if return_prob >= 0.3
+        "High" if return_prob >= RISK_TIERS["high"]
+        else "Medium" if return_prob >= RISK_TIERS["medium"]
         else "Low"
     )
 
     # SHAP
-    explainer = shap.TreeExplainer(classifier)
+    explainer = _models["shap_explainer"]
     sv = explainer.shap_values(X)
     if isinstance(sv, list):
         sv = sv[1]
@@ -172,7 +179,7 @@ def predict_transaction(
         for name, val in shap_pairs
     ]
 
-    # Models 2 + 3 — customer-level (looked up, not recomputed per request)
+    # Models 2 + 3: customer-level, looked up rather than recomputed per request.
     cust_row = cust_df[cust_df["customer_id"] == customer_id]
     if len(cust_row) > 0:
         anomaly_flag = int(cust_row.iloc[0].get("anomaly_flag", 0))
@@ -203,8 +210,6 @@ def get_customer_profile(customer_id: str) -> dict | None:
         return None
     r = row.iloc[0]
 
-    # Generate SHAP explanation for the customer's most recent transaction context
-    # Simplified: use customer features as a proxy feature vector
     return {
         "customer_id": customer_id,
         "segment": str(r.get("segment", "Unknown")),
@@ -217,18 +222,28 @@ def get_customer_profile(customer_id: str) -> dict | None:
         "recency_score": int(r.get("recency_score", 0)),
         "frequency_score": int(r.get("frequency_score", 0)),
         "monetary_score": float(r.get("monetary_score", 0.0)),
-        "top_shap_factors": [],  # Populated in full implementation
+        # A profile is not a prediction. SHAP belongs to scored transactions,
+        # where the transaction context exists, so this stays empty by design.
+        "top_shap_factors": [],
     }
 
 
 def get_substitutes(invoice_no: str, top_k: int = 3) -> dict | None:
     """Return top-3 substitute product recommendations for an invoice."""
+    lookup: dict[str, Any] | None = _models.get("invoice_substitutes")
+    if lookup is not None:
+        result = lookup.get(str(invoice_no))
+        if result is None:
+            return None
+        result = dict(result)
+        result["substitutes"] = result.get("substitutes", [])[:top_k]
+        return result
+
     if "product_embeddings" not in _models:
         return None
 
-    # Placeholder — full implementation in notebooks/10_substitute_recommender.ipynb
-    # This stub returns the expected schema so the API and frontend are testable
-    # before the recommender is fully trained.
+    # Backward-compatible empty response while Alvin has not built the new
+    # invoice_substitutes.joblib artifact yet.
     return {
         "invoice_no": invoice_no,
         "original_stock_code": "UNKNOWN",

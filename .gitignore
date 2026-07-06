@@ -1,8 +1,8 @@
-# Private local folders — never pushed to GitHub
+# Private local folders: never pushed to GitHub
 # Convention: any folder ending in _local/ is gitignored.
 **/*_local/
 
-# Data files — download instructions in README
+# Data files: download instructions in README
 data/raw/
 data/processed/
 *.csv
@@ -12,7 +12,7 @@ data/processed/
 # Exception: runtime.txt pins the Python version for Render deployment
 !runtime.txt
 
-# PowerBI and dashboard artifacts (committed — see dashboards/ folder)
+# PowerBI and dashboard artifacts, committed. See dashboards/ folder.
 # dashboards/retail_returns.pbix is intentionally tracked
 
 # Jupyter artifacts
@@ -39,7 +39,7 @@ env/
 .DS_Store
 Thumbs.db
 
-# Model artifacts — by default ignore everything under models/, then allow
+# Model artifacts: by default ignore everything under models/, then allow
 # back only the small (~14.5 MB total) runtime artifacts the FastAPI service
 # needs on Render. Regenerate any of these locally by running notebooks 01–10
 # and then `python scripts/build_api_artifacts.py`.
@@ -56,13 +56,15 @@ models/*
 !models/segmentation_kmeans.joblib
 !models/segmentation_scaler.joblib
 !models/customer_features.joblib
+!models/invoice_substitutes.joblib
 !models/product_embeddings.npy
 !models/embedding_stock_codes.joblib
 !models/als_model.joblib
 !models/als_product_index.joblib
 !models/als_customer_index.joblib
+!models/MODEL_CARD.md
 
-# MLflow local tracking store — kept out of git entirely. The run metadata
+# MLflow local tracking store: kept out of git entirely. The run metadata
 # leaks absolute local paths and the OS username, so we don't commit any of
 # it. Instead, capture a screenshot of `mlflow ui` and commit that under
 # figures/ for the README.

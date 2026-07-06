@@ -1,9 +1,9 @@
 """
-pipelines/prefect_flow.py — Prefect 2.x orchestration for Retail Returns Intelligence.
+pipelines/prefect_flow.py - Prefect 2.x orchestration for Retail Returns Intelligence.
 
 Pipeline: ingest → preprocess → feature engineering → train (4 models) → score → persist
 
-Schedule: weekly (even without new data — proves the flow works end-to-end).
+Schedule: weekly, even without new data, to prove the flow works end-to-end.
 Retry policy: 3 retries with 60s delay on transient failures.
 
 To run locally:
@@ -18,7 +18,6 @@ Screenshot the Prefect UI flow graph for the README after first successful run.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 
 import mlflow
@@ -46,7 +45,7 @@ MLFLOW_URI = "mlflow/mlruns"
 def ingest_raw_data(data_path: str = "data/raw/online_retail_II.xlsx") -> pd.DataFrame:
     """Load raw UCI Online Retail II data.
 
-    Cached for 24h — re-reads from disk only when the source file changes.
+    Cached for 24h. Re-reads from disk only when the source file changes.
     In production, this would pull from a cloud storage path (GCS/S3/DBFS).
     """
     logger = get_run_logger()
@@ -113,7 +112,7 @@ def train_classifier_task(
     customer_features: pd.DataFrame,
     category_rates: pd.DataFrame,
 ) -> dict:
-    """Train Model 1 — LightGBM return-likelihood classifier with MLflow tracking."""
+    """Train Model 1: LightGBM return-likelihood classifier with MLflow tracking."""
     logger = get_run_logger()
 
     from src.features import build_feature_matrix
@@ -150,7 +149,7 @@ def train_classifier_task(
 
 @task(name="train-anomaly-detector", retries=1)
 def train_anomaly_detector_task(customer_features: pd.DataFrame) -> None:
-    """Train Model 2 — Isolation Forest excessive-returner detector."""
+    """Train Model 2: Isolation Forest excessive-returner detector."""
     logger = get_run_logger()
 
     from src.models import train_anomaly_detector, save_model
@@ -175,7 +174,7 @@ def train_anomaly_detector_task(customer_features: pd.DataFrame) -> None:
 
 @task(name="train-segmentation", retries=1)
 def train_segmentation_task(customer_features: pd.DataFrame) -> None:
-    """Train Model 3 — KMeans customer segmentation."""
+    """Train Model 3: KMeans customer segmentation."""
     logger = get_run_logger()
 
     from src.models import train_segmentation, save_model

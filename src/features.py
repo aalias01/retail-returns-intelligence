@@ -1,5 +1,5 @@
 """
-src/features.py — Feature engineering pipeline for Retail Returns Intelligence.
+src/features.py - Feature engineering pipeline for Retail Returns Intelligence.
 
 Two variants are implemented here:
   - Pandas (fast iteration, notebook-friendly)
@@ -12,7 +12,6 @@ transactions with InvoiceDate < current transaction's InvoiceDate to prevent lea
 from __future__ import annotations
 
 import pandas as pd
-import numpy as np
 from typing import Tuple
 
 
@@ -27,7 +26,7 @@ def load_raw(path: str) -> pd.DataFrame:
     is_return flag derived from the C-prefix InvoiceNo convention.
     """
     df = pd.read_excel(path, sheet_name=None)
-    # UCI II has two sheets (Year 2009-2010, Year 2010-2011) — concat them
+    # UCI II has two sheets (Year 2009-2010, Year 2010-2011). Concat them.
     df = pd.concat(df.values(), ignore_index=True)
     df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
     # Standardize key column names
@@ -66,7 +65,7 @@ def add_transaction_features(df: pd.DataFrame) -> pd.DataFrame:
       - is_weekend: 1 if invoice_date falls on Saturday or Sunday
       - month_end_proximity: days from end of month (wardrobing signal)
       - country: categorical (kept as-is; encode downstream)
-      - revenue: quantity * unit_price (signed — negative for returns)
+      - revenue: quantity * unit_price, signed negative for returns
     """
     # Z-score unit_price within each product category
     price_stats = df.groupby("stock_code")["unit_price"].transform

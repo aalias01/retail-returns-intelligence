@@ -1,0 +1,9 @@
+[tool.ruff]
+target-version = "py311"
+exclude = [
+  "data",
+  "docs_local",
+  "frontend",
+  "mlflow",
+  "notebooks",
+]

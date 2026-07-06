@@ -1,481 +1,224 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="day">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Retail Returns Intelligence — Return Risk Scoring on 1M+ Transactions</title>
-  <meta name="description" content="A four-model machine learning system that scores return risk in real time, detects excessive returners, segments customers, and recommends substitutes — trained on 1.07M real UK retail transactions. LightGBM · 0.992 ROC-AUC · SHAP-explained." />
-
-  <!-- Open Graph -->
+  <title>Return risk · retail transactions</title>
+  <meta name="description" content="Scores a transaction's return likelihood before the refund. Built by Alvin Alias." />
   <meta property="og:type" content="website" />
-  <meta property="og:title" content="Retail Returns Intelligence" />
-  <meta property="og:description" content="Return risk, scored and explained before the refund. Four models on 1.07M real retail transactions — LightGBM, Isolation Forest, KMeans, hybrid recommender." />
+  <meta property="og:title" content="Return risk · retail transactions" />
+  <meta property="og:description" content="Scores a transaction's return likelihood before the refund. Built by Alvin Alias." />
   <meta property="og:url" content="https://returns.alvinalias.com" />
-
+  <meta name="theme-color" content="#f5f4ef" />
+  <script>
+    (function () {
+      function readCookie(name) {
+        var found = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+        return found ? decodeURIComponent(found[1]) : "";
+      }
+      var stored = readCookie("shop");
+      try { stored = stored || localStorage.getItem("shop") || ""; } catch (error) {}
+      var preferred = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "night" : "day";
+      var shop = stored === "day" || stored === "night" ? stored : preferred;
+      document.documentElement.setAttribute("data-theme", shop);
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute("content", shop === "night" ? "#201f1c" : "#f5f4ef");
+    })();
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=B612:wght@400;700&family=B612+Mono:wght@400;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-
-  <!-- Ambient background -->
-  <div class="bg-fx" aria-hidden="true">
-    <div class="bg-grid"></div>
-    <div class="bg-glow bg-glow-1"></div>
-    <div class="bg-glow bg-glow-2"></div>
-    <div class="bg-glow bg-glow-3"></div>
-  </div>
-
-  <!-- Sticky nav -->
-  <nav class="topnav" id="topnav">
-    <div class="nav-inner">
-      <a class="nav-brand" href="#top">
-        <span class="nav-dot"></span>
-        Retail Returns Intelligence
-      </a>
-      <div class="nav-links">
-        <a href="#demo">Demo</a>
-        <a href="#results">Results</a>
-        <a href="#method">Method</a>
-        <a href="#production">Production</a>
-        <a href="#stack">Stack</a>
-      </div>
-      <div class="nav-cta">
-        <a href="https://github.com/aalias01/retail-returns-intelligence" target="_blank" rel="noopener" class="nav-ghost">GitHub</a>
-        <a href="#demo" class="nav-primary">Try the demo</a>
+  <header class="nameplate" aria-label="Return risk nameplate">
+    <div class="nameplate-copy">
+      <h1>Return risk</h1>
+      <p>Scores a transaction's return likelihood before the refund. Built by Alvin Alias.</p>
+      <div class="status-stack">
+        <p class="status-line mono" id="status-line">server waking, first score can take a minute</p>
+        <div class="warm-meter warm-meter-compact hidden" id="health-warm-meter" role="status" aria-live="polite">
+          <div class="warm-meter-top">
+            <p class="warm-meter-number mono" data-warm-number>60</p>
+            <p class="warm-meter-label" data-warm-label>estimated seconds to warm</p>
+          </div>
+          <div class="warm-meter-scale" data-warm-scale></div>
+          <p class="warm-meter-log mono" data-warm-log>&gt; warm-up estimate counting · this is an estimate, not progress</p>
+        </div>
       </div>
     </div>
-  </nav>
 
-  <!-- ───────────────────────── Hero ───────────────────────── -->
-  <header class="hero" id="top">
-    <div class="hero-inner">
-      <div class="hero-copy reveal">
-        <div class="eyebrow"><span class="pulse"></span> ML SYSTEM · 1.07M REAL RETAIL TRANSACTIONS</div>
-        <h1 class="hero-title">Return risk, scored and explained<br /><span class="grad">before the refund.</span></h1>
-        <p class="hero-sub">
-          U.S. retailers lost <strong>$101B to return fraud and abuse</strong> in 2023. Retail Returns Intelligence
-          scores every transaction's return likelihood in real time, flags excessive returners <em>without labels</em>,
-          segments customers for differentiated policy, and recommends substitutes that turn refunds into retained revenue.
-        </p>
-
-        <div class="hero-meta-strip">
-          <div class="meta-pill"><span class="meta-num" data-count="0.992" data-decimals="3">0.000</span><span class="meta-lab">ROC-AUC</span></div>
-          <div class="meta-pill"><span class="meta-num" data-count="8.7" data-decimals="1" data-suffix="×">0×</span><span class="meta-lab">Top-decile lift</span></div>
-          <div class="meta-pill"><span class="meta-num" data-count="1.07" data-decimals="2" data-suffix="M">0M</span><span class="meta-lab">Transactions</span></div>
-          <div class="meta-pill"><span class="meta-num" data-count="4" data-decimals="0">0</span><span class="meta-lab">Models</span></div>
-        </div>
-
-        <div class="hero-cta">
-          <a href="#demo" class="btn-primary btn-lg">Score a transaction →</a>
-          <a href="https://retail-returns-api.onrender.com/docs" target="_blank" rel="noopener" class="btn-ghost btn-lg">API docs</a>
-        </div>
-        <p class="hero-byline">Built by Alvin Alias · MS Data Science, University of Washington</p>
-      </div>
-
-      <!-- Static preview card — a teaser of the live scorer -->
-      <aside class="hero-card reveal" aria-label="Sample scored transaction">
-        <div class="hc-head">
-          <span class="hc-tag">SAMPLE OUTPUT</span>
-          <span class="hc-id">Invoice C581483</span>
-        </div>
-        <div class="hc-gauge">
-          <svg viewBox="0 0 180 110" width="180" height="110" role="img" aria-label="Return probability 87 percent">
-            <path d="M20 100 A 70 70 0 0 1 160 100" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="14" stroke-linecap="round"/>
-            <path d="M20 100 A 70 70 0 0 1 160 100" fill="none" stroke="url(#hcgrad)" stroke-width="14" stroke-linecap="round" stroke-dasharray="220" stroke-dashoffset="29"/>
-            <defs>
-              <linearGradient id="hcgrad" x1="0" y1="0" x2="1" y2="0">
-                <stop offset="0%" stop-color="#f59e0b"/>
-                <stop offset="100%" stop-color="#ef4444"/>
-              </linearGradient>
-            </defs>
-          </svg>
-          <div class="hc-gauge-val">87<span>%</span></div>
-          <div class="hc-gauge-lab">return probability</div>
-        </div>
-        <div class="hc-row">
-          <span class="chip chip-high">High risk</span>
-          <span class="chip chip-seg-rt">Returner</span>
-          <span class="chip chip-flag">⚠ Excessive returner</span>
-        </div>
-        <div class="hc-shap">
-          <div class="hc-shap-title">Top SHAP drivers</div>
-          <div class="hc-bar"><span class="hc-bar-l">quantity_z</span><span class="hc-bar-t"><i class="pos" style="width:100%"></i></span><span class="hc-bar-v">+2.11</span></div>
-          <div class="hc-bar"><span class="hc-bar-l">category_return_rate</span><span class="hc-bar-t"><i class="pos" style="width:42%"></i></span><span class="hc-bar-v">+0.88</span></div>
-          <div class="hc-bar"><span class="hc-bar-l">monetary_score</span><span class="hc-bar-t"><i class="neg" style="width:22%"></i></span><span class="hc-bar-v">−0.46</span></div>
-        </div>
-      </aside>
+    <div class="governing" title="Source: README results table">
+      <span class="mono governing-value">ROC-AUC 0.992 / lift 8.7x</span>
+      <span class="governing-sub">1,067,371 real transactions · strict temporal split</span>
     </div>
+
+    <nav class="nameplate-links" aria-label="Project links">
+      <a href="https://github.com/aalias01/retail-returns-intelligence" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://retail-returns-api.onrender.com/docs" target="_blank" rel="noopener">API docs</a>
+      <span class="series mono">AA-2026-02</span>
+    </nav>
+
+    <button class="shop-toggle" id="shop-toggle" type="button" aria-label="Use night shop" aria-pressed="false">
+      <svg class="shop-icon shop-day" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true">
+        <circle cx="12" cy="12" r="4"></circle>
+        <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"></path>
+      </svg>
+      <span class="shop-track" aria-hidden="true"><span class="shop-knob"></span></span>
+      <svg class="shop-icon shop-night" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true">
+        <path d="M20 14.5A8 8 0 0 1 9.5 4 7 7 0 1 0 20 14.5z"></path>
+      </svg>
+    </button>
   </header>
 
   <main>
-
-    <!-- ───────────────────────── Problem ───────────────────────── -->
-    <section class="band" id="problem">
-      <div class="section-head reveal">
-        <div class="kicker">01 — The problem</div>
-        <h2>Most retailers catch excessive returners <span class="muted">after</span> the loss.</h2>
-        <p class="lede">
-          A small fraction of customers drive a disproportionate share of returns through wardrobing, bracketing, serial
-          returns, and policy abuse. The signal is in the transaction stream — but it usually gets read reactively, once
-          the refunds have already cleared.
-        </p>
-      </div>
-      <div class="stat-row reveal">
-        <div class="stat-card">
-          <div class="stat-big">$743B</div>
-          <div class="stat-cap">merchandise returned in the U.S. in 2023 — <strong>14.5% of all retail sales</strong>.</div>
-        </div>
-        <div class="stat-card accent-red">
-          <div class="stat-big">$101B</div>
-          <div class="stat-cap">lost to <strong>return fraud and abuse</strong> — roughly $13.70 of every $100 returned.</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-big">22.8%</div>
-          <div class="stat-cap">of transactions arrive with <strong>missing CustomerIDs</strong> — real, messy operational data.</div>
-        </div>
-      </div>
-      <p class="src-note reveal">Source: National Retail Federation &amp; Appriss Retail, 2023 Consumer Returns report.</p>
-    </section>
-
-    <!-- ───────────────────────── Live demo (centerpiece) ───────────────────────── -->
-    <section class="band band-demo" id="demo">
-      <div class="section-head reveal">
-        <div class="kicker">02 — Live demo</div>
-        <h2>Score a transaction in real time.</h2>
-        <p class="lede">
-          This calls a <strong>live FastAPI backend</strong> running the trained models — real inference, not a mockup.
-          Pick a real customer or enter your own transaction to get a return probability, risk tier, customer segment,
-          anomaly flag, and the top SHAP factors driving the prediction.
-        </p>
-        <div class="api-status" id="api-status">
-          <span class="dot" id="api-dot"></span>
-          <span id="api-status-text">Checking API…</span>
-        </div>
-      </div>
-
-      <div class="demo-grid">
-        <!-- Input card -->
-        <div class="panel reveal">
-          <div class="panel-head">
-            <h3>Transaction input</h3>
-            <span class="panel-sub">Try a real customer:</span>
-          </div>
-          <div class="sample-row">
-            <button type="button" class="btn-sample" data-sample="premium">Premium Loyal</button>
-            <button type="button" class="btn-sample" data-sample="healthy">Healthy Browser</button>
-            <button type="button" class="btn-sample" data-sample="risk">At-Risk</button>
-            <button type="button" class="btn-sample" data-sample="returner">Returner</button>
-          </div>
-          <form id="score-form">
-            <div class="form-grid">
-              <label>Customer ID
-                <input type="text" id="customer-id" placeholder="e.g. 16684" value="16684.0" required />
-              </label>
-              <label>Invoice No
-                <input type="text" id="invoice-no" placeholder="e.g. 536365" value="536365" required />
-              </label>
-              <label>Stock Code
-                <input type="text" id="stock-code" placeholder="e.g. 85123A" value="85123A" required />
-              </label>
-              <label>Quantity
-                <input type="number" id="quantity" min="1" value="6" required />
-              </label>
-              <label>Unit Price (£)
-                <input type="number" id="unit-price" min="0" step="0.01" value="2.55" required />
-              </label>
-              <label>Country
-                <input type="text" id="country" value="United Kingdom" />
-              </label>
-            </div>
-            <button type="submit" class="btn-primary btn-block">Score Transaction</button>
-          </form>
-          <div id="connection-banner" class="connection-banner hidden">
-            <strong>Backend waking up.</strong>
-            The API is on Render's free tier and sleeps after 15 min idle. First request can take ~30&nbsp;s — please retry.
+    <section class="faceplate" aria-label="Score a retail transaction">
+      <div class="ledger-pane">
+        <div class="chips-block">
+          <h2>Known customers, one per segment</h2>
+          <div class="chips" id="sample-chips" aria-label="Known customers">
+            <button type="button" class="chip" data-sample="premium">Premium loyal</button>
+            <button type="button" class="chip" data-sample="healthy">Healthy browser</button>
+            <button type="button" class="chip" data-sample="risk">At risk</button>
+            <button type="button" class="chip" data-sample="returner">Returner</button>
           </div>
         </div>
 
-        <!-- Results card -->
-        <div class="panel panel-results" id="score-results">
-          <div class="panel-head"><h3>Prediction</h3></div>
-
-          <div class="results-empty" id="results-empty">
-            <div class="empty-ring"></div>
-            <p>Submit a transaction to see the model's scored output.</p>
-          </div>
-
-          <div class="results-body hidden" id="results-body">
-            <div class="gauge-wrap">
-              <svg class="gauge" viewBox="0 0 200 120" width="200" height="120" aria-hidden="true">
-                <path d="M20 110 A 80 80 0 0 1 180 110" fill="none" stroke="rgba(255,255,255,0.07)" stroke-width="16" stroke-linecap="round"/>
-                <path id="gauge-arc" d="M20 110 A 80 80 0 0 1 180 110" fill="none" stroke="var(--low)" stroke-width="16" stroke-linecap="round" stroke-dasharray="251.3" stroke-dashoffset="251.3"/>
-              </svg>
-              <div class="gauge-center">
-                <div class="gauge-val" id="return-prob-value">—</div>
-                <div class="gauge-cap">return probability</div>
-              </div>
-              <div class="risk-badge" id="risk-badge">—</div>
-            </div>
-
-            <div class="result-meta">
-              <div class="rm-item">
-                <span class="rm-label">Segment</span>
-                <span class="segment-chip" id="segment-value">—</span>
-              </div>
-              <div class="rm-item">
-                <span class="rm-label">Anomaly status</span>
-                <span class="rm-val" id="anomaly-status">—</span>
-              </div>
-            </div>
-
-            <div class="shap-block">
-              <div class="shap-title">Top risk drivers <span class="mono-tag">SHAP</span></div>
-              <div id="shap-bars"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Substitutes -->
-      <div class="panel reveal hidden" id="substitutes-section">
-        <div class="panel-head">
-          <h3>Recommended substitutes</h3>
-          <span class="panel-sub">Offer these before issuing the refund — convert the return into retained revenue.</span>
-        </div>
-        <div id="substitutes-grid"></div>
-      </div>
-
-      <!-- Profile lookup -->
-      <div class="panel reveal" id="profile-section">
-        <div class="panel-head">
-          <h3>Customer profile lookup</h3>
-          <span class="panel-sub">Pull the full behavioral profile for any CustomerID.</span>
-        </div>
-        <form id="profile-form" class="profile-form">
-          <input type="text" id="profile-customer-id" placeholder="Enter CustomerID (e.g. 18102.0)" required />
-          <button type="submit" class="btn-secondary">Look up</button>
+        <form id="score-form" class="ledger" novalidate>
+          <label>
+            <span>Customer</span>
+            <input id="customer-id" name="customer_id" type="text" autocomplete="off" value="16684.0" />
+          </label>
+          <label>
+            <span>Invoice</span>
+            <input id="invoice-no" name="invoice_no" type="text" autocomplete="off" value="536365" />
+          </label>
+          <label>
+            <span>Stock code</span>
+            <input id="stock-code" name="stock_code" type="text" autocomplete="off" value="85123A" />
+          </label>
+          <label>
+            <span>Quantity</span>
+            <input id="quantity" name="quantity" type="number" inputmode="decimal" value="6" />
+          </label>
+          <label>
+            <span>Unit price</span>
+            <input id="unit-price" name="unit_price" type="number" inputmode="decimal" step="0.01" value="2.55" />
+          </label>
+          <label>
+            <span>Country</span>
+            <input id="country" name="country" type="text" autocomplete="off" value="United Kingdom" />
+          </label>
         </form>
-        <div class="profile-grid hidden" id="profile-grid"></div>
+
+        <div class="run-controls">
+          <button type="button" class="btn btn-primary" id="known-run">Score a known customer</button>
+          <button type="submit" form="score-form" class="btn btn-secondary" id="manual-run">Enter a transaction</button>
+        </div>
+        <p class="helper">Rotates four real customers, one from each segment the model found. Their history prints next to the score.</p>
+
+        <div class="error-note hidden" id="error-box" role="alert">
+          <p id="error-message"></p>
+          <p class="mono" id="error-detail"></p>
+        </div>
+
+        <ol class="run-log mono" id="run-log" aria-live="polite"></ol>
+      </div>
+
+      <div class="reading-pane">
+        <div class="warm-meter warm-meter-full hidden" id="score-warm-meter" role="status" aria-live="polite">
+          <div class="warm-meter-top">
+            <p class="warm-meter-number mono" data-warm-number>60</p>
+            <p class="warm-meter-label" data-warm-label>estimated seconds to warm</p>
+          </div>
+          <div class="warm-meter-scale" data-warm-scale></div>
+          <p class="warm-meter-log mono" data-warm-log>&gt; warm-up estimate counting · this is an estimate, not progress</p>
+          <p class="warm-meter-note">This runs on a free tier that sleeps between visitors. First start takes 30 to 60 seconds; runs after that are quick.</p>
+        </div>
+
+        <section class="reading" aria-label="Return probability reading">
+          <div class="reading-top">
+            <p class="major-value mono" id="return-probability" title="API field: return_probability">--</p>
+            <div>
+              <p class="reading-label">return probability</p>
+              <p class="tier-line" id="tier-line">--</p>
+              <p class="anomaly-line hidden" id="anomaly-line">flagged as an excessive returner</p>
+            </div>
+          </div>
+          <div class="scale-wrap" id="scale-wrap" aria-label="Return probability scale"></div>
+        </section>
+
+        <section class="history-check" aria-labelledby="history-heading">
+          <div class="section-heading">
+            <h2 id="history-heading">History check · what this customer has actually done</h2>
+            <p class="mono" id="anomaly-score-line"></p>
+          </div>
+          <div class="history-grid" id="history-grid"></div>
+          <p class="history-error hidden" id="history-error"></p>
+          <form id="profile-form" class="profile-lookup" novalidate>
+            <label>
+              <span>Look up any customer</span>
+              <input id="profile-customer-id" type="text" autocomplete="off" />
+            </label>
+            <button type="submit" class="btn btn-secondary">Look up</button>
+          </form>
+        </section>
+
+        <section class="deflection hidden" id="deflection-section" aria-labelledby="deflection-heading">
+          <h2 id="deflection-heading">What moved this score</h2>
+          <div class="deflection-table" id="deflection-table"></div>
+        </section>
+
+        <section class="substitutes hidden" id="substitutes-section" aria-labelledby="substitutes-heading">
+          <h2 id="substitutes-heading">If this comes back · substitutes worth offering</h2>
+          <p class="original-line mono hidden" id="original-line"></p>
+          <div class="substitute-list" id="substitute-list"></div>
+        </section>
       </div>
     </section>
 
-    <!-- ───────────────────────── Results showcase ───────────────────────── -->
-    <section class="band" id="results">
-      <div class="section-head reveal">
-        <div class="kicker">03 — Results that hold up</div>
-        <h2>Evaluated like it ships, not like a demo.</h2>
-        <p class="lede">
-          Temporal train/test split, point-in-time-safe features, threshold selection, explainability, and rolling-window
-          backtesting. Every figure below is generated by the notebooks in the repo.
-        </p>
-      </div>
-
-      <div class="fig-grid">
-        <figure class="fig-card fig-wide reveal">
-          <img src="assets/figures/04_pr_curve.png" alt="Precision-recall curve and F1-vs-threshold for the LightGBM return classifier" loading="lazy" />
-          <figcaption>
-            <span class="fig-tag">Classifier · LightGBM</span>
-            <strong>PR-AUC 0.852, edging XGBoost (0.849).</strong>
-            Threshold tuned to F1 = 0.789 at 0.94 — precision-recall is the right lens on a 1.8% base rate.
-          </figcaption>
-        </figure>
-
-        <figure class="fig-card reveal">
-          <img src="assets/figures/04_shap_importance.png" alt="SHAP global feature importance for the LightGBM classifier" loading="lazy" />
-          <figcaption>
-            <span class="fig-tag">Explainability · SHAP</span>
-            <strong>Every score is attributable.</strong>
-            Quantity, category return rate, and price drive risk — each prediction ships with its top factors.
-          </figcaption>
-        </figure>
-
-        <figure class="fig-card reveal">
-          <img src="assets/figures/05_anomaly_scores.png" alt="Isolation Forest score distribution and return rate by anomaly group" loading="lazy" />
-          <figcaption>
-            <span class="fig-tag">Anomaly · Isolation Forest</span>
-            <strong>294 excessive returners flagged — no labels.</strong>
-            Flagged customers show a visibly higher return-rate distribution, validating the unsupervised signal.
-          </figcaption>
-        </figure>
-
-        <figure class="fig-card reveal">
-          <img src="assets/figures/06_pca_clusters.png" alt="PCA projection of KMeans customer segments" loading="lazy" />
-          <figcaption>
-            <span class="fig-tag">Segmentation · KMeans (k=4)</span>
-            <strong>Four behavioral segments for differentiated policy.</strong>
-            Premium Loyal, Healthy Browser, At-Risk, and Returner — separated on RFM + return features.
-          </figcaption>
-        </figure>
-
-        <figure class="fig-card reveal">
-          <img src="assets/figures/07_ab_simulation.png" alt="Power curve and control-vs-treatment return rate for the A/B policy simulation" loading="lazy" />
-          <figcaption>
-            <span class="fig-tag">Experimentation · A/B simulation</span>
-            <strong>Powered to 80%, significant at p&lt;0.05.</strong>
-            A 14-day return window on the Returner segment cuts return-value ratio, with a spend guardrail intact.
-          </figcaption>
-        </figure>
-
-        <figure class="fig-card fig-wide reveal">
-          <img src="assets/figures/08_backtest_stability.png" alt="Rolling-window backtest: Brier score, precision at decile, and actual vs predicted return rate over time" loading="lazy" />
-          <figcaption>
-            <span class="fig-tag">Backtesting · 18 rolling windows</span>
-            <strong>Stable across 18 months, not a single lucky split.</strong>
-            Precision@decile holds near 0.18 and predicted return rate tracks actuals window over window.
-          </figcaption>
-        </figure>
-      </div>
-    </section>
-
-    <!-- ───────────────────────── Methodology ───────────────────────── -->
-    <section class="band" id="method">
-      <div class="section-head reveal">
-        <div class="kicker">04 — Four models, one system</div>
-        <h2>Return intelligence isn't one problem.</h2>
-        <p class="lede">
-          Is <em>this transaction</em> risky right now? Is <em>this customer</em> a systematic returner? How should policy
-          differ across the base? And how do we win the sale back? Each question gets its own model.
-        </p>
-      </div>
-
-      <div class="method-grid">
-        <article class="method-card reveal">
-          <div class="method-top"><span class="method-num">1</span><span class="method-kind">Supervised · LightGBM</span></div>
-          <h3>Return-likelihood classifier</h3>
-          <p>Per-transaction P(return) at checkout. Trained on a strict temporal split (2009–H1 2011 → H2 2011) with point-in-time-safe history features. SHAP makes every score explainable.</p>
-        </article>
-        <article class="method-card reveal">
-          <div class="method-top"><span class="method-num">2</span><span class="method-kind">Unsupervised · Isolation Forest</span></div>
-          <h3>Excessive-returner detection</h3>
-          <p>Flags systematic returners from customer-level behavior with no labels required. Validated against a top-decile return-value-ratio heuristic.</p>
-        </article>
-        <article class="method-card reveal">
-          <div class="method-top"><span class="method-num">3</span><span class="method-kind">Clustering · KMeans</span></div>
-          <h3>Customer segmentation</h3>
-          <p>k=4 on RFM + return features → Premium Loyal · Healthy Browser · At-Risk · Returner. Turns one blunt return policy into four targeted ones.</p>
-        </article>
-        <article class="method-card reveal">
-          <div class="method-top"><span class="method-num">4</span><span class="method-kind">Hybrid · embeddings + ALS</span></div>
-          <h3>Substitute recommender</h3>
-          <p>Content embeddings (sentence-transformers) blended with implicit ALS. At the return moment, surfaces alternatives to retain revenue instead of refunding it.</p>
-        </article>
-      </div>
-
-      <div class="leak-note reveal">
-        <span class="leak-icon">⚡</span>
-        <p><strong>Temporal leakage is the trap here.</strong> Lifetime return rate, return velocity, and avg days-to-return must be computed using only transactions <em>before</em> the one being scored. All features are point-in-time safe, and the split is strictly chronological — no future leaks backward.</p>
-      </div>
-    </section>
-
-    <!-- ───────────────────────── Production ───────────────────────── -->
-    <section class="band" id="production">
-      <div class="section-head reveal">
-        <div class="kicker">05 — Built like production</div>
-        <h2>MLOps, not notebook-ops.</h2>
-        <p class="lede">
-          The modeling is wrapped in the scaffolding a real deployment needs: orchestration, experiment tracking, tests,
-          a serving API, and a pipeline that's proven to scale.
-        </p>
-      </div>
-
-      <div class="prod-grid">
-        <div class="prod-card reveal">
-          <h3>Orchestration</h3>
-          <p>Prefect 2.x runs the weekly <span class="mono">ingest → feature → train → score</span> flow with retries and observability.</p>
+    <section class="folds" aria-label="Project records">
+      <details>
+        <summary>Calibration record · four models, each against its baseline</summary>
+        <div class="fold-body">
+          <table>
+            <tbody>
+              <tr><td>ROC-AUC 0.992 · LightGBM classifier, temporal split</td></tr>
+              <tr><td>PR-AUC 0.852 vs 0.849 XGBoost comparison</td></tr>
+              <tr><td>Top-decile precision 15.9% vs 1.83% base rate, an 8.7x lift</td></tr>
+              <tr><td>Backtest mean precision at the top decile 0.181 across 18 rolling monthly windows</td></tr>
+              <tr><td>Excessive returners flagged 294 customers at 5% contamination</td></tr>
+              <tr><td>Segmentation silhouette 0.238, k=4</td></tr>
+              <tr><td>Recommender Recall@10 0.093, NDCG@10 0.046</td></tr>
+            </tbody>
+          </table>
+          <p>UCI Online Retail II, Dec 2009 to Dec 2011, returns labeled by C-prefixed invoices; 22.8% of rows lack a CustomerID and the pipeline handles them rather than dropping them.</p>
         </div>
-        <div class="prod-card reveal">
-          <h3>Experiment tracking</h3>
-          <p>MLflow logs params, metrics, and SHAP artifacts across all four model runs — reproducible comparisons, not one-off cells.</p>
-        </div>
-        <div class="prod-card reveal">
-          <h3>Scales to warehouse volume</h3>
-          <p>The same feature logic runs in PySpark on Databricks with a medallion architecture: <span class="mono">Bronze → Silver → Gold</span>.</p>
-        </div>
-        <div class="prod-card reveal">
-          <h3>Serving</h3>
-          <p>FastAPI on Render with typed Pydantic schemas and a <span class="mono">/health</span> check. The demo above hits it live.</p>
-        </div>
-        <div class="prod-card reveal">
-          <h3>Tested</h3>
-          <p>A pytest suite covers the API contract, score schema, customer profile, substitutes, and feature-matrix shape.</p>
-        </div>
-        <div class="prod-card reveal">
-          <h3>SQL foundations</h3>
-          <p>Feature aggregations prototyped in DuckDB — CTEs, window functions, and RFM rollups before they hit the pipeline.</p>
-        </div>
-      </div>
+      </details>
 
-      <div class="arch-flow reveal" aria-label="System data flow">
-        <span class="flow-node">User input</span>
-        <span class="flow-arrow">→</span>
-        <span class="flow-node">FastAPI</span>
-        <span class="flow-arrow">→</span>
-        <span class="flow-node">Feature lookup</span>
-        <span class="flow-arrow">→</span>
-        <span class="flow-node accent">LightGBM · IF · KMeans · Recommender</span>
-        <span class="flow-arrow">→</span>
-        <span class="flow-node">SHAP</span>
-        <span class="flow-arrow">→</span>
-        <span class="flow-node">JSON</span>
-      </div>
-    </section>
+      <details>
+        <summary>How it works · point-in-time features, temporal split</summary>
+        <div class="fold-body">
+          <p>History features computed only from transactions before the one being scored; trained on 2009 through mid 2011, tested on the last half of 2011, because random splits leak the future; four models because return risk, serial returners, segmentation, and substitution are different problems.</p>
+        </div>
+      </details>
 
-    <!-- ───────────────────────── Stack ───────────────────────── -->
-    <section class="band" id="stack">
-      <div class="section-head reveal">
-        <div class="kicker">06 — Tech stack</div>
-        <h2>The toolkit.</h2>
-      </div>
-      <div class="stack-grid reveal">
-        <div class="stack-col">
-          <h4>Modeling</h4>
-          <div class="tags"><span>LightGBM</span><span>XGBoost</span><span>Isolation Forest</span><span>KMeans</span><span>sentence-transformers</span><span>implicit ALS</span></div>
+      <details>
+        <summary>Notes · what a score can and cannot say about a person</summary>
+        <div class="fold-body">
+          <ol>
+            <li>This runs on a free tier that sleeps between visitors. First start takes 30 to 60 seconds; runs after that are quick.</li>
+            <li>No transaction has a return label at the moment it is scored; that label arrives weeks later or never. The history check exists so you can judge the score against the customer's record.</li>
+            <li>A high score is a risk estimate about a transaction, not a verdict on a person; the anomaly flag is behavioral, not moral.</li>
+            <li>The four known customers are real records from the dataset, one from each segment the clustering found.</li>
+          </ol>
         </div>
-        <div class="stack-col">
-          <h4>Data &amp; scale</h4>
-          <div class="tags"><span>Pandas</span><span>NumPy</span><span>DuckDB</span><span>PySpark</span><span>Databricks</span></div>
-        </div>
-        <div class="stack-col">
-          <h4>Interpretability &amp; stats</h4>
-          <div class="tags"><span>SHAP</span><span>scipy.stats</span><span>statsmodels</span></div>
-        </div>
-        <div class="stack-col">
-          <h4>MLOps &amp; serving</h4>
-          <div class="tags"><span>MLflow</span><span>Prefect</span><span>FastAPI</span><span>pytest</span><span>Render</span><span>Vercel</span></div>
-        </div>
-      </div>
-
-      <details class="limitations reveal">
-        <summary>Known limitations <span class="lim-hint">— honest disclosures</span></summary>
-        <ul>
-          <li>Return labels are UCI Online Retail II cancellations (<span class="mono">C</span>-prefixed invoices); the data doesn't separate refunds from store credit or partial-line cancellations.</li>
-          <li>The live API serves precomputed customer features rather than recomputing history per request — production would join against a feature store.</li>
-          <li>Some transaction-time features fall back to dataset means at inference; the classifier still leans on customer-level signal.</li>
-          <li>The <span class="mono">/substitutes</span> recommender is trained and evaluated offline in v1; live wiring is a V2 item.</li>
-          <li>The A/B test is a simulation against held-out history with a two-proportion z-test and spend guardrail — not a live randomized arm.</li>
-        </ul>
       </details>
     </section>
   </main>
 
-  <!-- ───────────────────────── Footer ───────────────────────── -->
-  <footer class="site-footer">
-    <div class="footer-inner">
-      <div class="footer-brand">
-        <span class="nav-dot"></span> Retail Returns Intelligence
-        <p>Return risk scoring · anomaly detection · segmentation · substitute recommendations.</p>
-      </div>
-      <div class="footer-links">
-        <a href="https://github.com/aalias01/retail-returns-intelligence" target="_blank" rel="noopener">GitHub repo</a>
-        <a href="https://retail-returns-api.onrender.com/docs" target="_blank" rel="noopener">API docs</a>
-        <a href="https://archive.ics.uci.edu/dataset/502/online+retail+ii" target="_blank" rel="noopener">Dataset (UCI II)</a>
-      </div>
-    </div>
-    <div class="footer-base">
-      Built by <a href="https://github.com/aalias01" target="_blank" rel="noopener">Alvin Alias</a> · MS Data Science, University of Washington · 2026
-    </div>
+  <footer class="footer">
+    <p>Built by Alvin Alias · 2026 · AA-2026-02 · <a href="https://github.com/aalias01/retail-returns-intelligence" target="_blank" rel="noopener">GitHub</a> · <a href="https://retail-returns-api.onrender.com/docs" target="_blank" rel="noopener">API docs</a></p>
   </footer>
 
   <script src="app.js"></script>

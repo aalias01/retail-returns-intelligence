@@ -1,12 +1,12 @@
 """
-api/main.py — FastAPI backend for Retail Returns Intelligence.
+api/main.py - FastAPI backend for Retail Returns Intelligence.
 
 Endpoints:
-  GET  /                           — landing page
-  GET  /health                     — health check (model load status)
-  POST /score                      — score a single transaction (return probability + segment + SHAP)
-  GET  /customer/{customer_id}/profile — full customer behavioral profile
-  GET  /substitutes/{invoice_no}   — top-3 substitute product recommendations
+  GET  /                           - landing page
+  GET  /health                     - health check (model load status)
+  POST /score                      - score a single transaction (return probability + segment + SHAP)
+  GET  /customer/{customer_id}/profile - full customer behavioral profile
+  GET  /substitutes/{invoice_no}   - top-3 substitute product recommendations
 
 Deployment: Render (free tier) via render.yaml Blueprint.
 """
@@ -14,8 +14,10 @@ Deployment: Render (free tier) via render.yaml Blueprint.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import logging
+import time
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from api import predictor
@@ -28,8 +30,12 @@ from api.schemas import (
 )
 
 
+logger = logging.getLogger("retail_returns.api")
+logging.basicConfig(level=logging.INFO)
+
+
 # ---------------------------------------------------------------------------
-# Lifespan — load models once at startup
+# Lifespan: load models once at startup
 # ---------------------------------------------------------------------------
 
 @asynccontextmanager
@@ -37,9 +43,9 @@ async def lifespan(app: FastAPI):
     try:
         predictor.load_all_models()
     except FileNotFoundError as e:
-        # Allow API to start in "no models" mode — useful during scaffolding
+        # Allow API to start in "no models" mode, useful during scaffolding
         # before training notebooks have been run. /score will return 503.
-        print(f"WARNING: Model artifacts not found — API running in degraded mode.\n{e}")
+        print(f"WARNING: Model artifacts not found. API running in degraded mode.\n{e}")
     yield
 
 
@@ -51,7 +57,7 @@ app = FastAPI(
     title="Retail Returns Intelligence API",
     description=(
         "Return-likelihood scoring, excessive-returner detection, customer segmentation, "
-        "and substitute product recommendations — built on UCI Online Retail II data."
+        "and substitute product recommendations, built on UCI Online Retail II data."
     ),
     version="1.0.0",
     lifespan=lifespan,
@@ -66,10 +72,39 @@ app.add_middleware(
         "https://returns.alvinalias.com",           # canonical demo (Primary)
         "https://retail-returns-intelligence.vercel.app",  # legacy, 308-redirects to subdomain
     ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
+
+
+@app.middleware("http")
+async def log_scoring_latency(request: Request, call_next):
+    watch = request.url.path == "/score" or request.url.path.startswith("/substitutes/")
+    if not watch:
+        return await call_next(request)
+
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        logger.info(
+            "route=%s status=%s duration_ms=%.1f",
+            request.url.path,
+            500,
+            elapsed_ms,
+        )
+        raise
+
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    logger.info(
+        "route=%s status=%s duration_ms=%.1f",
+        request.url.path,
+        response.status_code,
+        elapsed_ms,
+    )
+    return response
 
 
 # ---------------------------------------------------------------------------
@@ -90,6 +125,7 @@ async def health():
     return HealthResponse(
         status="ok",
         models_loaded=predictor.models_loaded(),
+        risk_tiers=predictor.RISK_TIERS,
     )
 
 
@@ -152,7 +188,7 @@ async def customer_profile(customer_id: str):
 async def substitute_recommendations(invoice_no: str):
     """Return top-3 substitute product recommendations for a given invoice.
 
-    Used when a return is predicted or initiated — recommend alternatives
+    Used when a return is predicted or initiated. Recommend alternatives
     to convert refunds into retained revenue.
     """
     if not predictor.models_loaded():

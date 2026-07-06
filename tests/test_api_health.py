@@ -10,6 +10,7 @@ def test_health_endpoint_returns_ok(client):
     body = response.json()
     assert body["status"] == "ok"
     assert body["models_loaded"] is True
+    assert body["risk_tiers"] == {"high": 0.6, "medium": 0.3}
     assert "version" in body
 
 
