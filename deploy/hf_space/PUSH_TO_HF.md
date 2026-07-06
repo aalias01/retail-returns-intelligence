@@ -56,6 +56,20 @@ curl -s "https://alvinalias-retail-returns-intelligence.hf.space/demo-cases?limi
 
 ## After HF is live
 
-1. Update `HF_SPACE_URL` in `.github/workflows/wake_hf_space.yml` if needed.
-2. Test the Vercel preview from branch `hf-space-api`.
-3. Merge `hf-space-api` to `main` only after the acceptance checklist in `docs_local/HF_SPACES_MIGRATION.md` passes.
+1. Add `HF_TOKEN` to GitHub repo secrets (Settings → Secrets → Actions). Use the same Hugging Face write token you used for the first manual push.
+2. The workflow `.github/workflows/sync_hf_space.yml` pushes `deploy/hf_space/` to HF when `api/`, `src/`, `models/`, or `requirements.txt` change on `main`. Run it manually from the Actions tab via **workflow_dispatch** if needed.
+3. Test the Vercel preview from branch `hf-space-api` (historical; production is on `main` after cutover).
+4. Merge `hf-space-api` to `main` only after the acceptance checklist in `docs_local/HF_SPACES_MIGRATION.md` passes.
+
+## GitHub Actions setup (one time)
+
+1. Create a Hugging Face write token at https://huggingface.co/settings/tokens
+2. In GitHub: **aalias01/retail-returns-intelligence → Settings → Secrets and variables → Actions → New repository secret**
+3. Name: `HF_TOKEN` · Value: your HF write token
+4. Push any API change to `main`, or trigger **Sync Retail HF Space** manually from the Actions tab
+
+After the first successful Action run, you can delete the local clone:
+
+```bash
+rm -rf ~/retail-returns-hf
+```
