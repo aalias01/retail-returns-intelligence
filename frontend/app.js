@@ -1,4 +1,4 @@
-const API_BASE = "https://retail-returns-api.onrender.com";
+const API_BASE = "https://aalias01-retail-returns-intelligence.hf.space";
 const WARMUP_LIMIT_SECONDS = 60;
 const WARMUP_GRACE_MS = 2500;
 const WARMUP_RETIRE_MS = 4000;
@@ -9,7 +9,7 @@ const WARMUP_STRINGS = {
   ready: "ready",
   measured: (seconds) => `> awake · measured wake time ${seconds} s`,
   overrunLabel: "seconds elapsed · still starting",
-  overrun: "> past the usual window · still waiting, counting up honestly",
+  overrun: "> still waiting · the Space is waking from extended inactivity",
 };
 const LOCAL_WARMUP_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
@@ -882,7 +882,7 @@ async function runScore(options = {}) {
     const network = error instanceof TypeError || /fetch|network|aborted/i.test(error.message);
     if (network) {
       showScoreError(
-        "This runs on a free tier that sleeps between visitors. First start takes 30 to 60 seconds; runs after that are quick.",
+        "This ML demo sleeps after extended inactivity. First wake can take a moment; runs after that are quick.",
         "Try again in a moment.",
       );
     } else {
