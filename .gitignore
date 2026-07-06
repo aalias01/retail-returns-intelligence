@@ -57,6 +57,7 @@ models/*
 !models/segmentation_scaler.joblib
 !models/customer_features.joblib
 !models/invoice_substitutes.joblib
+!models/demo_cases.joblib
 !models/product_embeddings.npy
 !models/embedding_stock_codes.joblib
 !models/als_model.joblib

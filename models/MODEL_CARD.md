@@ -30,6 +30,10 @@ The substitute recommender uses product-description embeddings plus ALS artifact
 
 The current lookup rationale is content-only when served from the precomputed artifact. It reports content similarity, catalogue return rate, and whether the candidate appears in that customer's return history.
 
+## Demo cases
+
+`scripts/build_api_artifacts.py` also writes `models/demo_cases.joblib`, a curated pool of real purchase invoice lines for the public frontend. The cases are varied across Low, Medium, and High display tiers, all four customer segments, and behavior-anomaly examples. They are not a separate model and they do not change training metrics. They keep the live demo realistic by sending real historical invoice context through `/score` instead of letting visitors invent impossible customer, invoice, price, and stock-code combinations.
+
 ## Limitations
 
 The data is from one UK online retailer and covers 2009 to 2011. Return labels are cancellations in the source data; the dataset does not separate refunds, store credit, and partial-line cancellations. The policy test in notebook 07 is an effect-size simulation, not a live randomized experiment.

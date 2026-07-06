@@ -50,11 +50,12 @@ Model details and limitations are in [models/MODEL_CARD.md](models/MODEL_CARD.md
 ## Architecture
 
 ```
-User input (CustomerID or InvoiceNo)
+Visitor selects or searches a real invoice case
       |
-frontend/app.js  ->  POST /score          ->  api/predictor.py
-                 ->  GET  /substitutes/   ->  feature lookup
+frontend/app.js  ->  GET  /demo-cases     ->  curated invoice case lookup
+                 ->  POST /score          ->  api/predictor.py
                  ->  GET  /customer/      ->  model inference (LightGBM + IF + KMeans + recommender)
+                 ->  GET  /substitutes/   ->  precomputed substitute lookup
                                           ->  SHAP explanation
                                                |
                                      JSON response rendered in browser
@@ -62,7 +63,7 @@ frontend/app.js  ->  POST /score          ->  api/predictor.py
 Prefect (weekly)  ->  ingest -> features -> train -> score  ->  MLflow (all runs tracked)
 ```
 
-Frontend is a static ledger-desk page on Vercel: known customers rotate through the same `/score` path as manual entries, then `/customer/{id}/profile` prints the history check beside the probability scale. API is FastAPI on Render. Shared feature and model logic lives in `src/`.
+Frontend is a static ledger-desk page on Vercel. It pulls curated real invoice lines from `/demo-cases`, lets visitors filter by risk tier, segment, or behavior anomaly, then sends the selected invoice through the same `/score` path the API exposes. The ledger fields are locked on purpose because each sample carries real transaction context such as `unit_price_z`, `quantity_z`, `is_weekend`, and category return rate. `/customer/{id}/profile` prints the history check beside the probability scale, and high-risk or substitute-ready invoices call `/substitutes/{invoice_no}`. API is FastAPI on Render. Shared feature and model logic lives in `src/`.
 
 ## Tech stack
 
@@ -95,6 +96,8 @@ Run the notebooks in order:
 Start the API and frontend:
 
 ```bash
+python scripts/build_api_artifacts.py
+ls -lh models/customer_features.joblib models/invoice_substitutes.joblib models/demo_cases.joblib
 uvicorn api.main:app --reload
 # docs at http://localhost:8000/docs
 ```
@@ -116,13 +119,13 @@ curl -s http://localhost:8000/health
 pytest -q
 ```
 
-Tests that need missing artifacts skip instead of failing. The suite covers `/health`, `/score` schema, `/customer/{id}/profile`, the `/substitutes` contract, and feature-matrix shape.
+Tests that need missing artifacts skip instead of failing. The suite covers `/health`, `/demo-cases`, `/score` schema, `/customer/{id}/profile`, the `/substitutes` contract, and feature-matrix shape.
 
 ## Limitations
 
 - Return labels are UCI cancellations (`C`-prefixed invoices). The dataset doesn't distinguish refunds from store credit or partial-line cancellations.
-- The live API serves precomputed customer features from `models/customer_features.joblib`. Production would join against a feature store.
-- `unit_price_z`, `quantity_z`, and `month_end_proximity` fall back to dataset means at inference unless product statistics are packaged with the API.
+- The live API serves precomputed customer features from `models/customer_features.joblib` and curated demo invoices from `models/demo_cases.joblib`. Production would join against a feature store and a transaction store.
+- Manual API calls can omit `unit_price_z`, `quantity_z`, and `month_end_proximity`; the API then uses neutral defaults. The frontend demo uses curated invoice cases because those fields are already known for real historical rows.
 - The A/B test is a simulation against held-out historical behavior, not a live randomized experiment.
 - The API runs on Render's free tier, so the first request after idle can take around a minute to cold-start.
 

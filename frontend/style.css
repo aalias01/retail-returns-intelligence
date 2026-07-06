@@ -264,14 +264,16 @@ main {
 }
 
 .ledger span,
-.profile-lookup span {
+.profile-lookup span,
+.case-search span {
   color: var(--ink-2);
   font-family: var(--mono);
   font-size: 12.5px;
 }
 
 .ledger input,
-.profile-lookup input {
+.profile-lookup input,
+.case-search input {
   width: 100%;
   min-width: 0;
   border: 0;
@@ -284,9 +286,21 @@ main {
 }
 
 .ledger input:focus,
-.profile-lookup input:focus {
+.profile-lookup input:focus,
+.case-search input:focus {
   outline: 0;
   box-shadow: inset 0 0 0 2px var(--ink);
+}
+
+.ledger input[readonly] {
+  cursor: default;
+}
+
+.case-strip {
+  margin: 10px 0 0;
+  color: var(--ink-2);
+  font-size: 12.5px;
+  overflow-wrap: anywhere;
 }
 
 .run-controls {
@@ -318,6 +332,70 @@ main {
   background:
     repeating-linear-gradient(45deg, transparent 0 5px, var(--hairline-soft) 5px 7px),
     var(--paper);
+}
+
+.case-search {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+  margin-top: 12px;
+}
+
+.case-search label {
+  display: grid;
+  gap: 5px;
+}
+
+.case-search input {
+  border: 1.5px solid var(--ink);
+}
+
+.case-suggestions {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--hairline);
+}
+
+.case-suggestion {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 0;
+  border: 0;
+  border-bottom: 1px solid var(--hairline-soft);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  text-align: left;
+}
+
+.case-suggestion:hover,
+.case-suggestion:focus-visible {
+  background: var(--field);
+}
+
+.case-suggestion strong,
+.case-suggestion span,
+.case-suggestion-empty {
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+
+.case-suggestion span,
+.case-suggestion-empty {
+  color: var(--ink-2);
+}
+
+.case-suggestion:disabled {
+  cursor: not-allowed;
+  color: var(--ink-2);
+}
+
+.case-suggestion-empty {
+  margin: 0;
+  padding: 8px 0;
 }
 
 .helper {
@@ -874,6 +952,7 @@ details[open] summary::after {
   .run-controls,
   .reading-top,
   .profile-lookup,
+  .case-search,
   .deflection-row,
   .substitute-row {
     grid-template-columns: 1fr;

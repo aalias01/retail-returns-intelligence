@@ -18,6 +18,11 @@ class TransactionScoreRequest(BaseModel):
     quantity: float = Field(..., ge=1, description="Quantity ordered")
     unit_price: float = Field(..., ge=0, description="Unit price in GBP")
     country: str = Field(default="United Kingdom", description="Country of customer")
+    unit_price_z: float | None = Field(default=None, description="Optional real-invoice unit price z-score")
+    quantity_z: float | None = Field(default=None, description="Optional real-invoice quantity z-score")
+    is_weekend: int | None = Field(default=None, ge=0, le=1, description="Optional real-invoice weekend flag")
+    month_end_proximity: int | None = Field(default=None, ge=0, description="Optional real-invoice days from month end")
+    category_return_rate: float | None = Field(default=None, ge=0.0, le=1.0, description="Optional stock-level return rate")
 
     model_config = {"json_schema_extra": {
         "example": {
@@ -46,6 +51,47 @@ class TransactionScoreResponse(BaseModel):
     anomaly_flag: int = Field(..., description="1 = customer flagged by the behavior anomaly detector")
     anomaly_score: float = Field(..., description="Isolation Forest decision score (lower = more anomalous)")
     top_shap_factors: list[ShapEntry]
+
+
+# ---------------------------------------------------------------------------
+# /demo-cases: curated real invoice examples for the frontend
+# ---------------------------------------------------------------------------
+
+class DemoFilterOption(BaseModel):
+    key: str
+    label: str
+
+
+class DemoCase(BaseModel):
+    case_id: str
+    invoice_no: str
+    customer_id: str
+    stock_code: str
+    description: str
+    quantity: float
+    unit_price: float
+    country: str
+    invoice_date: str
+    segment: str
+    risk_tier: str
+    return_probability: float = Field(..., ge=0.0, le=1.0)
+    anomaly_flag: int
+    anomaly_score: float
+    lifetime_return_rate: float
+    frequency_score: int
+    monetary_score: float
+    has_substitutes: bool
+    unit_price_z: float
+    quantity_z: float
+    is_weekend: int
+    month_end_proximity: int
+    category_return_rate: float
+    tags: list[str]
+
+
+class DemoCasesResponse(BaseModel):
+    filters: list[DemoFilterOption]
+    cases: list[DemoCase]
 
 
 # ---------------------------------------------------------------------------

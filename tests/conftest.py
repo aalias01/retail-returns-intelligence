@@ -39,6 +39,11 @@ def substitute_artifact_available(models_dir: Path) -> bool:
 
 
 @pytest.fixture(scope="session")
+def demo_cases_artifact_available(models_dir: Path) -> bool:
+    return (models_dir / "demo_cases.joblib").exists()
+
+
+@pytest.fixture(scope="session")
 def client(models_available: bool):
     """FastAPI TestClient with models loaded once for the whole session."""
     from fastapi.testclient import TestClient

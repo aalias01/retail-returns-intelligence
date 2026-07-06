@@ -18,6 +18,17 @@ from api.schemas import ShapEntry
 
 MODELS_DIR = Path("models")
 RISK_TIERS = {"high": 0.6, "medium": 0.3}
+DEMO_FILTERS = [
+    {"key": "any", "label": "Any"},
+    {"key": "low", "label": "Low risk"},
+    {"key": "medium", "label": "Medium risk"},
+    {"key": "high", "label": "High risk"},
+    {"key": "behavior-anomaly", "label": "Behavior anomaly"},
+    {"key": "premium-loyal", "label": "Premium Loyal"},
+    {"key": "healthy-browser", "label": "Healthy Browser"},
+    {"key": "at-risk", "label": "At-Risk"},
+    {"key": "returner", "label": "Returner"},
+]
 
 # Global model store, populated by load_all_models() at startup.
 _models: dict[str, Any] = {}
@@ -58,6 +69,10 @@ def load_all_models() -> None:
     substitutes_path = MODELS_DIR / "invoice_substitutes.joblib"
     if substitutes_path.exists():
         _models["invoice_substitutes"] = joblib.load(substitutes_path)
+
+    demo_cases_path = MODELS_DIR / "demo_cases.joblib"
+    if demo_cases_path.exists():
+        _models["demo_cases"] = joblib.load(demo_cases_path)
 
     # Legacy recommender artifacts are optional. Older deployments may still
     # contain them, but `als_model.joblib` needs the `implicit` package when
@@ -104,6 +119,10 @@ def _build_transaction_features(
     quantity: float,
     unit_price: float,
     is_weekend: int,
+    unit_price_z: float | None = None,
+    quantity_z: float | None = None,
+    month_end_proximity: int | None = None,
+    category_return_rate: float | None = None,
 ) -> pd.DataFrame:
     """Assemble a single-row feature DataFrame for the classifier."""
     cust_df: pd.DataFrame = _models["customer_features"]
@@ -129,10 +148,10 @@ def _build_transaction_features(
     return pd.DataFrame(
         [
             {
-                "unit_price_z": 0.0,  # requires product stats, set to mean at inference
-                "quantity_z": 0.0,
+                "unit_price_z": 0.0 if unit_price_z is None else unit_price_z,
+                "quantity_z": 0.0 if quantity_z is None else quantity_z,
                 "is_weekend": is_weekend,
-                "month_end_proximity": 15,  # midpoint default
+                "month_end_proximity": 15 if month_end_proximity is None else month_end_proximity,
                 **{k: cust_feats.get(k, 0.0) for k in [
                     "lifetime_return_rate",
                     "return_value_ratio",
@@ -143,8 +162,12 @@ def _build_transaction_features(
                     "monetary_score",
                     "unique_categories_returned",
                     "weekend_return_share",
-                    "category_return_rate",
                 ]},
+                "category_return_rate": (
+                    cust_feats.get("category_return_rate", 0.0)
+                    if category_return_rate is None
+                    else category_return_rate
+                ),
             }
         ]
     )
@@ -158,13 +181,25 @@ def predict_transaction(
     unit_price: float,
     country: str,
     is_weekend: int,
+    unit_price_z: float | None = None,
+    quantity_z: float | None = None,
+    month_end_proximity: int | None = None,
+    category_return_rate: float | None = None,
 ) -> dict:
     """Run all models for a single transaction and return scored response."""
     classifier = _models["classifier"]
     cust_df: pd.DataFrame = _models["customer_features"]
 
     X = _build_transaction_features(
-        customer_id, stock_code, quantity, unit_price, is_weekend
+        customer_id,
+        stock_code,
+        quantity,
+        unit_price,
+        is_weekend,
+        unit_price_z=unit_price_z,
+        quantity_z=quantity_z,
+        month_end_proximity=month_end_proximity,
+        category_return_rate=category_return_rate,
     )
 
     # Model 1: return probability
@@ -269,4 +304,55 @@ def get_substitutes(invoice_no: str, top_k: int = 3) -> dict | None:
         "original_stock_code": "UNKNOWN",
         "original_description": "Item lookup pending",
         "substitutes": [],
+    }
+
+
+def _case_matches_filter(case: dict[str, Any], filter_key: str) -> bool:
+    if filter_key in {"", "any"}:
+        return True
+    if filter_key in {"low", "medium", "high"}:
+        return str(case.get("risk_tier", "")).lower() == filter_key
+    if filter_key == "behavior-anomaly":
+        return int(case.get("anomaly_flag", 0)) == 1
+    return filter_key in {str(tag) for tag in case.get("tags", [])}
+
+
+def _case_search_text(case: dict[str, Any]) -> str:
+    parts = [
+        case.get("invoice_no", ""),
+        case.get("customer_id", ""),
+        case.get("stock_code", ""),
+        case.get("description", ""),
+        case.get("risk_tier", ""),
+        case.get("segment", ""),
+        "behavior anomaly" if int(case.get("anomaly_flag", 0)) == 1 else "",
+    ]
+    return " ".join(str(part).lower() for part in parts)
+
+
+def get_demo_cases(
+    filter_key: str = "any",
+    query: str = "",
+    limit: int = 160,
+) -> dict[str, Any]:
+    """Return curated real invoice examples for the frontend."""
+    cases = list(_models.get("demo_cases", []))
+    normalized_filter = filter_key.strip().lower() if filter_key else "any"
+    normalized_query = query.strip().lower()
+
+    filtered = [
+        case
+        for case in cases
+        if _case_matches_filter(case, normalized_filter)
+    ]
+    if normalized_query:
+        filtered = [
+            case
+            for case in filtered
+            if normalized_query in _case_search_text(case)
+        ]
+
+    return {
+        "filters": DEMO_FILTERS,
+        "cases": filtered[: max(1, min(limit, 500))],
     }

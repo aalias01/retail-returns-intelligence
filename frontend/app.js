@@ -13,46 +13,132 @@ const WARMUP_STRINGS = {
 };
 const LOCAL_WARMUP_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
 
-const SAMPLE_CUSTOMERS = {
-  note: "Copied from retail frontend app.js SAMPLE_CUSTOMERS, one per real KMeans segment. No transaction-level ground truth exists; the cross-check is GET /customer/{id}/profile.",
-  customers: {
-    premium: {
-      id: "16684.0",
-      invoice: "536365",
-      stock: "85123A",
-      qty: 6,
-      price: 2.55,
-      segment_label: "Premium loyal",
-    },
-    healthy: {
-      id: "16333.0",
-      invoice: "536378",
-      stock: "22423",
-      qty: 4,
-      price: 12.95,
-      segment_label: "Healthy browser",
-    },
-    risk: {
-      id: "15749.0",
-      invoice: "536846",
-      stock: "84879",
-      qty: 8,
-      price: 1.69,
-      segment_label: "At risk",
-    },
-    returner: {
-      id: "18102.0",
-      invoice: "537434",
-      stock: "22086",
-      qty: 12,
-      price: 2.95,
-      segment_label: "Returner",
-    },
-  },
-};
+const FALLBACK_FILTERS = [
+  { key: "any", label: "Any" },
+  { key: "low", label: "Low risk" },
+  { key: "medium", label: "Medium risk" },
+  { key: "high", label: "High risk" },
+  { key: "behavior-anomaly", label: "Behavior anomaly" },
+  { key: "premium-loyal", label: "Premium Loyal" },
+  { key: "healthy-browser", label: "Healthy Browser" },
+  { key: "at-risk", label: "At-Risk" },
+  { key: "returner", label: "Returner" },
+];
 
-const sampleOrder = ["premium", "healthy", "risk", "returner"];
-let nextSampleIndex = 0;
+const FALLBACK_DEMO_CASES = [
+  {
+    case_id: "536365:85123A",
+    customer_id: "16684.0",
+    invoice_no: "536365",
+    stock_code: "85123A",
+    description: "White hanging heart t-light holder",
+    quantity: 6,
+    unit_price: 2.55,
+    country: "United Kingdom",
+    invoice_date: "2010-12-01",
+    segment: "Premium Loyal",
+    risk_tier: "Low",
+    return_probability: 0,
+    anomaly_flag: 1,
+    anomaly_score: -0.1662,
+    lifetime_return_rate: 0.182,
+    frequency_score: 55,
+    monetary_score: 147143,
+    has_substitutes: true,
+    unit_price_z: 0,
+    quantity_z: 0,
+    is_weekend: 0,
+    month_end_proximity: 30,
+    category_return_rate: 0.05,
+    tags: ["low", "premium-loyal", "behavior-anomaly", "substitutes"],
+  },
+  {
+    case_id: "536378:22423",
+    customer_id: "16333.0",
+    invoice_no: "536378",
+    stock_code: "22423",
+    description: "Regency cakestand 3 tier",
+    quantity: 4,
+    unit_price: 12.95,
+    country: "United Kingdom",
+    invoice_date: "2010-12-01",
+    segment: "Healthy Browser",
+    risk_tier: "Low",
+    return_probability: 0.08,
+    anomaly_flag: 0,
+    anomaly_score: 0,
+    lifetime_return_rate: 0,
+    frequency_score: 1,
+    monetary_score: 52,
+    has_substitutes: true,
+    unit_price_z: 0,
+    quantity_z: 0,
+    is_weekend: 0,
+    month_end_proximity: 30,
+    category_return_rate: 0.05,
+    tags: ["low", "healthy-browser", "substitutes"],
+  },
+  {
+    case_id: "536846:84879",
+    customer_id: "15749.0",
+    invoice_no: "536846",
+    stock_code: "84879",
+    description: "Assorted colour bird ornament",
+    quantity: 8,
+    unit_price: 1.69,
+    country: "United Kingdom",
+    invoice_date: "2010-12-02",
+    segment: "At-Risk",
+    risk_tier: "Medium",
+    return_probability: 0.42,
+    anomaly_flag: 0,
+    anomaly_score: 0,
+    lifetime_return_rate: 0.04,
+    frequency_score: 3,
+    monetary_score: 415,
+    has_substitutes: true,
+    unit_price_z: 0,
+    quantity_z: 0,
+    is_weekend: 0,
+    month_end_proximity: 29,
+    category_return_rate: 0.05,
+    tags: ["medium", "at-risk", "substitutes"],
+  },
+  {
+    case_id: "537434:22086",
+    customer_id: "18102.0",
+    invoice_no: "537434",
+    stock_code: "22086",
+    description: "Paper chain kit 50's christmas",
+    quantity: 12,
+    unit_price: 2.95,
+    country: "United Kingdom",
+    invoice_date: "2010-12-06",
+    segment: "Returner",
+    risk_tier: "High",
+    return_probability: 0.72,
+    anomaly_flag: 1,
+    anomaly_score: -0.2103,
+    lifetime_return_rate: 0.055,
+    frequency_score: 145,
+    monetary_score: 608822,
+    has_substitutes: true,
+    unit_price_z: 0,
+    quantity_z: 0,
+    is_weekend: 0,
+    month_end_proximity: 25,
+    category_return_rate: 0.05,
+    tags: ["high", "returner", "behavior-anomaly", "substitutes"],
+  },
+];
+
+const MAX_SUGGESTIONS = 6;
+
+let demoFilters = FALLBACK_FILTERS;
+let demoCases = FALLBACK_DEMO_CASES;
+let activeFilter = "any";
+let selectedCase = null;
+let lastCaseId = "";
 let riskTiers = null;
 let healthWarmMeter = null;
 let scoreWarmMeter = null;
@@ -458,31 +544,238 @@ function runWarmupStub() {
   return false;
 }
 
-if (!runWarmupStub()) {
-  pingHealth();
+function slug(value) {
+  return String(value || "").trim().toLowerCase().replaceAll(" ", "-").replaceAll("_", "-");
 }
 
-function setLedger(sampleKey) {
-  const sample = SAMPLE_CUSTOMERS.customers[sampleKey];
-  if (!sample) return null;
-  $("customer-id").value = sample.id;
-  $("invoice-no").value = sample.invoice;
-  $("stock-code").value = sample.stock;
-  $("quantity").value = sample.qty;
-  $("unit-price").value = sample.price;
-  $("country").value = "United Kingdom";
+function normalizeNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
 
-  document.querySelectorAll(".chip").forEach((chip) => {
-    chip.setAttribute("aria-pressed", chip.dataset.sample === sampleKey ? "true" : "false");
+function normalizeText(value, fallback = "") {
+  const text = String(value ?? "").trim();
+  return text || fallback;
+}
+
+function normalizeCase(raw) {
+  const riskTier = normalizeText(raw.risk_tier, "Low");
+  const segment = normalizeText(raw.segment, "Unknown");
+  const invoiceNo = normalizeText(raw.invoice_no);
+  const stockCode = normalizeText(raw.stock_code);
+  const tags = Array.isArray(raw.tags) ? raw.tags.map(slug) : [];
+  tags.push(slug(riskTier), slug(segment));
+  if (Number(raw.anomaly_flag || 0) === 1) tags.push("behavior-anomaly");
+  if (raw.has_substitutes) tags.push("substitutes");
+
+  return {
+    case_id: normalizeText(raw.case_id, `${invoiceNo}:${stockCode}`),
+    invoice_no: invoiceNo,
+    customer_id: normalizeText(raw.customer_id),
+    stock_code: stockCode,
+    description: normalizeText(raw.description, "Retail invoice line"),
+    quantity: normalizeNumber(raw.quantity, 1),
+    unit_price: normalizeNumber(raw.unit_price, 0),
+    country: normalizeText(raw.country, "United Kingdom"),
+    invoice_date: normalizeText(raw.invoice_date),
+    segment,
+    risk_tier: riskTier,
+    return_probability: normalizeNumber(raw.return_probability, 0),
+    anomaly_flag: Number(raw.anomaly_flag || 0),
+    anomaly_score: normalizeNumber(raw.anomaly_score, 0),
+    lifetime_return_rate: normalizeNumber(raw.lifetime_return_rate, 0),
+    frequency_score: normalizeNumber(raw.frequency_score, 0),
+    monetary_score: normalizeNumber(raw.monetary_score, 0),
+    has_substitutes: Boolean(raw.has_substitutes),
+    unit_price_z: normalizeNumber(raw.unit_price_z, 0),
+    quantity_z: normalizeNumber(raw.quantity_z, 0),
+    is_weekend: Number(raw.is_weekend || 0),
+    month_end_proximity: normalizeNumber(raw.month_end_proximity, 15),
+    category_return_rate: normalizeNumber(raw.category_return_rate, 0.05),
+    tags: [...new Set(tags.filter(Boolean))],
+  };
+}
+
+function formatMoney(value) {
+  return new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency: "GBP",
+    maximumFractionDigits: Number.isInteger(value) ? 0 : 2,
+  }).format(value);
+}
+
+function formatQuantity(value) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
+function caseMatchesFilter(demoCase, filterKey = activeFilter) {
+  const normalized = slug(filterKey || "any");
+  if (!normalized || normalized === "any") return true;
+  if (["low", "medium", "high"].includes(normalized)) {
+    return slug(demoCase.risk_tier) === normalized;
+  }
+  if (normalized === "behavior-anomaly") {
+    return demoCase.anomaly_flag === 1;
+  }
+  return demoCase.tags.includes(normalized);
+}
+
+function caseSearchText(demoCase) {
+  return [
+    demoCase.invoice_no,
+    demoCase.customer_id,
+    demoCase.stock_code,
+    demoCase.description,
+    demoCase.risk_tier,
+    demoCase.segment,
+    demoCase.country,
+    demoCase.tags.join(" "),
+  ].join(" ").toLowerCase();
+}
+
+function casePrimaryLine(demoCase) {
+  return `Invoice ${demoCase.invoice_no} · customer ${demoCase.customer_id} · ${demoCase.risk_tier} risk`;
+}
+
+function caseMetaLine(demoCase) {
+  return `${demoCase.segment} · ${demoCase.stock_code} · qty ${formatQuantity(demoCase.quantity)} · ${formatMoney(demoCase.unit_price)}`;
+}
+
+function filteredCases(filterKey = activeFilter) {
+  const pool = demoCases.filter((demoCase) => caseMatchesFilter(demoCase, filterKey));
+  return pool.length ? pool : demoCases;
+}
+
+function pickRandomCase(pool) {
+  const choices = pool.length > 1
+    ? pool.filter((demoCase) => demoCase.case_id !== lastCaseId)
+    : pool;
+  const source = choices.length ? choices : pool;
+  const picked = source[Math.floor(Math.random() * source.length)];
+  if (picked) lastCaseId = picked.case_id;
+  return picked || null;
+}
+
+function setLedgerFromCase(demoCase) {
+  if (!demoCase) return;
+  selectedCase = demoCase;
+  $("customer-id").value = demoCase.customer_id;
+  $("invoice-no").value = demoCase.invoice_no;
+  $("stock-code").value = demoCase.stock_code;
+  $("quantity").value = formatQuantity(demoCase.quantity);
+  $("unit-price").value = demoCase.unit_price.toFixed(2).replace(/\.00$/, "");
+  $("country").value = demoCase.country;
+  $("case-strip").textContent = `${casePrimaryLine(demoCase)} · ${demoCase.description}`;
+}
+
+function renderFilterChips() {
+  const chips = $("sample-chips");
+  if (!chips) return;
+  chips.innerHTML = "";
+  demoFilters.forEach((filter) => {
+    const key = slug(filter.key || filter.label);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "chip";
+    button.dataset.filter = key;
+    button.textContent = filter.label || filter.key;
+    button.setAttribute("aria-pressed", key === activeFilter ? "true" : "false");
+    button.addEventListener("click", () => setActiveFilter(key));
+    chips.appendChild(button);
   });
-  return sample;
 }
 
-document.querySelectorAll(".chip").forEach((chip) => {
-  chip.setAttribute("aria-pressed", "false");
-  chip.addEventListener("click", () => setLedger(chip.dataset.sample));
-});
-setLedger("premium");
+function setActiveFilter(filterKey, options = {}) {
+  const normalized = slug(filterKey || "any");
+  activeFilter = demoFilters.some((filter) => slug(filter.key || filter.label) === normalized)
+    ? normalized
+    : "any";
+  document.querySelectorAll("#sample-chips .chip").forEach((chip) => {
+    chip.setAttribute("aria-pressed", chip.dataset.filter === activeFilter ? "true" : "false");
+  });
+  if (!options.keepCase) {
+    const next = pickRandomCase(filteredCases(activeFilter));
+    if (next) setLedgerFromCase(next);
+  }
+  renderSuggestions();
+}
+
+function matchingCases(query) {
+  const needle = query.trim().toLowerCase();
+  const source = needle ? demoCases : filteredCases(activeFilter);
+  return source
+    .filter((demoCase) => !needle || caseSearchText(demoCase).includes(needle))
+    .slice(0, MAX_SUGGESTIONS);
+}
+
+function renderSuggestions() {
+  const box = $("case-suggestions");
+  const input = $("case-search-input");
+  if (!box || !input) return;
+  const matches = matchingCases(input.value);
+  box.innerHTML = "";
+
+  if (!matches.length) {
+    const empty = document.createElement("p");
+    empty.className = "case-suggestion-empty mono";
+    empty.textContent = "No sample invoices matched. Try invoice number, customer ID, product code, segment, or risk tier.";
+    box.appendChild(empty);
+    box.classList.remove("hidden");
+    return;
+  }
+
+  matches.forEach((demoCase) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "case-suggestion";
+    button.setAttribute("role", "option");
+
+    const primary = document.createElement("strong");
+    primary.textContent = casePrimaryLine(demoCase);
+    const meta = document.createElement("span");
+    meta.textContent = caseMetaLine(demoCase);
+    button.append(primary, meta);
+    button.addEventListener("click", () => selectAndScoreCase(demoCase));
+    box.appendChild(button);
+  });
+  box.classList.remove("hidden");
+}
+
+async function loadDemoCases() {
+  try {
+    const response = await fetch(`${API_BASE}/demo-cases?limit=160`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = await response.json();
+    const cases = Array.isArray(data.cases)
+      ? data.cases.map(normalizeCase).filter((demoCase) => demoCase.invoice_no && demoCase.customer_id)
+      : [];
+    if (cases.length) demoCases = cases;
+    if (Array.isArray(data.filters) && data.filters.length) {
+      demoFilters = data.filters
+        .map((filter) => ({
+          key: slug(filter.key || filter.label),
+          label: normalizeText(filter.label, filter.key),
+        }))
+        .filter((filter) => filter.key && filter.label);
+    }
+  } catch (error) {
+    demoCases = FALLBACK_DEMO_CASES.map(normalizeCase);
+    demoFilters = FALLBACK_FILTERS;
+  }
+  renderFilterChips();
+  setActiveFilter(activeFilter);
+}
+
+demoCases = demoCases.map(normalizeCase);
+renderFilterChips();
+setLedgerFromCase(demoCases[0]);
+renderSuggestions();
+
+if (!runWarmupStub()) {
+  pingHealth().finally(loadDemoCases);
+} else {
+  loadDemoCases();
+}
 
 function logLine(text) {
   const item = document.createElement("li");
@@ -514,6 +807,31 @@ function payloadFromLedger() {
   };
 }
 
+function casePayload(demoCase) {
+  return {
+    customer_id: demoCase.customer_id,
+    invoice_no: demoCase.invoice_no,
+    stock_code: demoCase.stock_code,
+    quantity: demoCase.quantity,
+    unit_price: demoCase.unit_price,
+    country: demoCase.country,
+    unit_price_z: demoCase.unit_price_z,
+    quantity_z: demoCase.quantity_z,
+    is_weekend: demoCase.is_weekend,
+    month_end_proximity: demoCase.month_end_proximity,
+    category_return_rate: demoCase.category_return_rate,
+  };
+}
+
+function setScoringBusy(isBusy) {
+  $("known-run").disabled = isBusy;
+  $("case-search-submit").disabled = isBusy;
+  $("case-search-input").disabled = isBusy;
+  document.querySelectorAll(".case-suggestion").forEach((button) => {
+    button.disabled = isBusy;
+  });
+}
+
 function showScoreError(message, rawDetail = "") {
   $("error-message").textContent = message;
   $("error-detail").textContent = rawDetail;
@@ -543,12 +861,12 @@ async function scorePayload(payload, onResponse) {
 }
 
 async function runScore(options = {}) {
-  const payload = payloadFromLedger();
+  const demoCase = options.case || selectedCase;
+  const payload = demoCase ? casePayload(demoCase) : payloadFromLedger();
   clearRunState({ keepLog: options.keepLog });
   const startedAt = performance.now();
   scoreWarmMeter.start({ startedAt, emitLine: logLine });
-  $("known-run").disabled = true;
-  $("manual-run").disabled = true;
+  setScoringBusy(true);
 
   try {
     const score = await scorePayload(payload, (responseAt) => scoreWarmMeter.markReady(responseAt));
@@ -556,7 +874,7 @@ async function runScore(options = {}) {
     renderScore(score);
     logLine("> pulling this customer's history");
     await fetchAndRenderProfile(payload.customer_id, true);
-    if (score.risk_tier === "High") {
+    if (score.risk_tier === "High" || demoCase?.has_substitutes) {
       await fetchSubstitutes(payload.invoice_no);
     }
   } catch (error) {
@@ -571,23 +889,43 @@ async function runScore(options = {}) {
       showScoreError(`Could not score this transaction. ${error.message}`, error.rawDetail || error.message);
     }
   } finally {
-    $("known-run").disabled = false;
-    $("manual-run").disabled = false;
+    setScoringBusy(false);
+    renderSuggestions();
   }
 }
 
-$("known-run").addEventListener("click", async () => {
-  const key = sampleOrder[nextSampleIndex];
-  nextSampleIndex = (nextSampleIndex + 1) % sampleOrder.length;
-  const sample = setLedger(key);
-  clearRunState();
-  logLine(`> customer ${sample.id} · ${sample.segment_label} sample loaded`);
-  await runScore({ keepLog: true });
+$("known-run")?.addEventListener("click", async () => {
+  const demoCase = pickRandomCase(filteredCases(activeFilter));
+  if (!demoCase) return;
+  await selectAndScoreCase(demoCase);
 });
 
-$("score-form").addEventListener("submit", (event) => {
+async function selectAndScoreCase(demoCase) {
+  if (!demoCase) return;
+  setLedgerFromCase(demoCase);
+  clearRunState();
+  logLine(`> ${casePrimaryLine(demoCase)} · sample loaded`);
+  await runScore({ keepLog: true, case: demoCase });
+}
+
+$("score-form")?.addEventListener("submit", (event) => {
   event.preventDefault();
-  runScore();
+  runScore({ case: selectedCase });
+});
+
+$("case-search-input")?.addEventListener("input", renderSuggestions);
+$("case-search-input")?.addEventListener("focus", renderSuggestions);
+$("case-search-form")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const firstMatch = matchingCases($("case-search-input").value)[0];
+  if (firstMatch) {
+    await selectAndScoreCase(firstMatch);
+    return;
+  }
+  showScoreError(
+    "No sample invoice matched that search.",
+    "Try invoice number, customer ID, product code, segment, or risk tier.",
+  );
 });
 
 function renderScore(data) {
@@ -691,7 +1029,7 @@ async function fetchAndRenderProfile(customerId) {
   }
 }
 
-$("profile-form").addEventListener("submit", async (event) => {
+$("profile-form")?.addEventListener("submit", async (event) => {
   event.preventDefault();
   const customerId = $("profile-customer-id").value.trim();
   if (!customerId) return;

@@ -23,6 +23,12 @@ training libraries. It uses the committed product embeddings for content
 similarity and the local transaction workbook, when present, for invoice and
 customer return history.
 
+Finally, it builds ``models/demo_cases.joblib``: a small curated pool of real
+purchase invoice lines for the live demo. The pool is deliberately varied by
+risk tier, customer segment, and anomaly flag so the "score a sample invoice"
+button shows the model's range without letting visitors invent impossible
+invoice/price combinations.
+
 Run this once after notebooks 01–06 finish. It is also safe to re-run.
 
 Usage
@@ -33,6 +39,7 @@ Outputs
 -------
     models/customer_features.joblib    (joblib-pickled pandas.DataFrame)
     models/invoice_substitutes.joblib  (joblib-pickled lookup dict)
+    models/demo_cases.joblib           (joblib-pickled list[dict])
 
 Notes on the cluster -> segment mapping
 ---------------------------------------
@@ -54,6 +61,7 @@ are policy buckets, not a fraud predictor on their own.
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -62,6 +70,9 @@ import numpy as np
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 DATA = ROOT / "data" / "processed"
 RAW = ROOT / "data" / "raw" / "online_retail_II.xlsx"
 MODELS = ROOT / "models"
@@ -113,6 +124,35 @@ SAMPLE_INVOICES = [
 ]
 MAX_FLAGGED_INVOICES = 2_000
 TARGET_SUBSTITUTE_ARTIFACT_BYTES = 2 * 1024 * 1024
+TARGET_DEMO_CASES = 96
+DEMO_CASE_RANDOM_STATE = 2026
+EXCLUDED_DEMO_STOCK_CODES = {
+    "M",
+    "D",
+    "DOT",
+    "POST",
+    "BANK CHARGES",
+    "AMAZONFEE",
+    "CRUK",
+    "C2",
+    "ADJUST",
+}
+CLASSIFIER_FEATURES = [
+    "unit_price_z",
+    "quantity_z",
+    "is_weekend",
+    "month_end_proximity",
+    "lifetime_return_rate",
+    "return_value_ratio",
+    "return_velocity",
+    "tenure_days",
+    "recency_score",
+    "frequency_score",
+    "monetary_score",
+    "unique_categories_returned",
+    "weekend_return_share",
+    "category_return_rate",
+]
 
 
 def assign_segment_labels(km, scaler) -> dict[int, str]:
@@ -159,37 +199,16 @@ def _load_transactions() -> pd.DataFrame | None:
         print(f"\nSkipped invoice_substitutes.joblib: missing {RAW}")
         return None
 
-    xls = pd.ExcelFile(RAW)
-    frames = [
-        pd.read_excel(
-            xls,
-            sheet_name=sheet,
-            usecols=[
-                "Invoice",
-                "StockCode",
-                "Description",
-                "Quantity",
-                "Price",
-                "Customer ID",
-            ],
-        )
-        for sheet in xls.sheet_names
-    ]
-    raw = pd.concat(frames, ignore_index=True)
-    raw = raw.rename(
-        columns={
-            "Invoice": "invoice_no",
-            "StockCode": "stock_code",
-            "Description": "description",
-            "Quantity": "quantity",
-            "Price": "unit_price",
-            "Customer ID": "customer_id",
-        }
-    )
+    from src.features import load_raw
+
+    raw = load_raw(str(RAW))
     raw["invoice_no"] = raw["invoice_no"].astype(str).str.strip()
     raw["stock_code"] = raw["stock_code"].map(_normalize_stock_code)
     raw["customer_id"] = raw["customer_id"].map(_normalize_customer_id)
     raw["description"] = raw["description"].fillna("").astype(str).str.strip()
+    raw["country"] = raw.get("country", "United Kingdom")
+    raw["country"] = raw["country"].fillna("United Kingdom").astype(str).str.strip()
+    raw["invoice_date"] = pd.to_datetime(raw["invoice_date"])
     return raw
 
 
@@ -406,6 +425,218 @@ def build_invoice_substitutes() -> Path | None:
     return out
 
 
+def _risk_tier(probability: float) -> str:
+    if probability >= 0.6:
+        return "High"
+    if probability >= 0.3:
+        return "Medium"
+    return "Low"
+
+
+def _slug(value: object) -> str:
+    return (
+        str(value)
+        .strip()
+        .lower()
+        .replace(" ", "-")
+        .replace("_", "-")
+    )
+
+
+def _evenly_spaced_rows(frame: pd.DataFrame, n: int) -> pd.DataFrame:
+    if frame.empty or n <= 0:
+        return frame.head(0)
+    ordered = frame.sort_values("return_probability", ascending=True).reset_index(drop=True)
+    if len(ordered) <= n:
+        return ordered
+    positions = np.linspace(0, len(ordered) - 1, n).round().astype(int)
+    return ordered.iloc[np.unique(positions)]
+
+
+def _demo_candidates(
+    transactions: pd.DataFrame,
+    customer_features: pd.DataFrame,
+    product_catalogue: pd.DataFrame,
+) -> pd.DataFrame:
+    from src.features import add_transaction_features
+
+    featured = add_transaction_features(transactions.copy())
+    purchases = featured[
+        ~featured["invoice_no"].str.startswith("C", na=False)
+        & (featured["quantity"] > 0)
+        & (featured["unit_price"] > 0)
+        & (featured["customer_id"] != "")
+        & (featured["stock_code"] != "")
+        & ~featured["stock_code"].isin(EXCLUDED_DEMO_STOCK_CODES)
+    ].copy()
+    purchases["line_value"] = purchases["quantity"] * purchases["unit_price"]
+    purchase_lines = (
+        purchases
+        .sort_values(["invoice_no", "line_value"], ascending=[True, False])
+        .drop_duplicates("invoice_no", keep="first")
+    )
+
+    products = product_catalogue.copy()
+    products["stock_code"] = products["stock_code"].map(_normalize_stock_code)
+    products = products.rename(
+        columns={
+            "description": "product_description",
+            "category_return_rate": "product_category_return_rate",
+        }
+    )
+
+    customer_cols = [
+        col
+        for col in customer_features.columns
+        if col != "category_return_rate"
+    ]
+    rows = (
+        purchase_lines
+        .merge(customer_features[customer_cols], on="customer_id", how="inner")
+        .merge(
+            products[[
+                "stock_code",
+                "product_description",
+                "product_category_return_rate",
+            ]],
+            on="stock_code",
+            how="left",
+        )
+    )
+    rows["description"] = (
+        rows["product_description"]
+        .fillna(rows["description"])
+        .fillna("")
+        .astype(str)
+        .str.strip()
+    )
+    rows = rows[rows["description"] != ""].copy()
+    rows["category_return_rate"] = (
+        rows["product_category_return_rate"]
+        .fillna(DEFAULT_CATEGORY_RETURN_RATE)
+        .astype(float)
+    )
+
+    classifier = joblib.load(MODELS / "classifier.joblib")
+    X = rows[CLASSIFIER_FEATURES].fillna(0)
+    rows["return_probability"] = classifier.predict_proba(X)[:, 1]
+    rows["risk_tier"] = rows["return_probability"].map(_risk_tier)
+
+    substitute_path = MODELS / "invoice_substitutes.joblib"
+    if substitute_path.exists():
+        substitute_lookup = joblib.load(substitute_path)
+        rows["has_substitutes"] = rows["invoice_no"].astype(str).isin(substitute_lookup)
+    else:
+        rows["has_substitutes"] = False
+
+    return rows
+
+
+def _select_demo_cases(candidates: pd.DataFrame) -> pd.DataFrame:
+    picks = []
+    for tier, count in [("Low", 28), ("Medium", 28), ("High", 36)]:
+        tier_frame = candidates[candidates["risk_tier"] == tier]
+        if tier == "High":
+            tier_frame = tier_frame.sort_values(
+                ["has_substitutes", "return_probability"],
+                ascending=[False, False],
+            )
+        picks.append(_evenly_spaced_rows(tier_frame, count))
+
+    for segment in ["Premium Loyal", "Healthy Browser", "At-Risk", "Returner"]:
+        picks.append(_evenly_spaced_rows(candidates[candidates["segment"] == segment], 10))
+
+    anomaly_cases = candidates[candidates["anomaly_flag"] == 1].sort_values(
+        ["has_substitutes", "return_probability"],
+        ascending=[False, False],
+    )
+    picks.append(_evenly_spaced_rows(anomaly_cases, 24))
+
+    selected = pd.concat(picks, ignore_index=True, sort=False)
+    selected["case_id"] = (
+        selected["invoice_no"].astype(str) + ":" + selected["stock_code"].astype(str)
+    )
+    selected = selected.drop_duplicates("case_id", keep="first")
+    if len(selected) > TARGET_DEMO_CASES:
+        selected = _evenly_spaced_rows(selected, TARGET_DEMO_CASES)
+    return selected.sort_values(
+        ["risk_tier", "segment", "return_probability", "invoice_no"],
+        ascending=[True, True, False, True],
+    )
+
+
+def _demo_record(row: pd.Series) -> dict[str, object]:
+    tags = [
+        _slug(row["risk_tier"]),
+        _slug(row["segment"]),
+    ]
+    if int(row.get("anomaly_flag", 0)) == 1:
+        tags.append("behavior-anomaly")
+    if bool(row.get("has_substitutes", False)):
+        tags.append("substitutes")
+
+    return {
+        "case_id": str(row["case_id"]),
+        "invoice_no": str(row["invoice_no"]),
+        "customer_id": _normalize_customer_id(row["customer_id"]),
+        "stock_code": _normalize_stock_code(row["stock_code"]),
+        "description": str(row.get("description", "")),
+        "quantity": float(row["quantity"]),
+        "unit_price": float(row["unit_price"]),
+        "country": str(row.get("country") or "United Kingdom"),
+        "invoice_date": pd.Timestamp(row["invoice_date"]).date().isoformat(),
+        "segment": str(row["segment"]),
+        "risk_tier": str(row["risk_tier"]),
+        "return_probability": round(float(row["return_probability"]), 4),
+        "anomaly_flag": int(row.get("anomaly_flag", 0)),
+        "anomaly_score": round(float(row.get("anomaly_score", 0.0)), 4),
+        "lifetime_return_rate": round(float(row.get("lifetime_return_rate", 0.0)), 4),
+        "frequency_score": int(row.get("frequency_score", 0)),
+        "monetary_score": round(float(row.get("monetary_score", 0.0)), 2),
+        "has_substitutes": bool(row.get("has_substitutes", False)),
+        "unit_price_z": round(float(row.get("unit_price_z", 0.0)), 4),
+        "quantity_z": round(float(row.get("quantity_z", 0.0)), 4),
+        "is_weekend": int(row.get("is_weekend", 0)),
+        "month_end_proximity": int(row.get("month_end_proximity", 15)),
+        "category_return_rate": round(float(row.get("category_return_rate", 0.0)), 4),
+        "tags": tags,
+    }
+
+
+def build_demo_cases() -> Path | None:
+    required = [
+        MODELS / "classifier.joblib",
+        MODELS / "customer_features.joblib",
+        DATA / "product_catalogue.parquet",
+    ]
+    missing = [path for path in required if not path.exists()]
+    transactions = _load_transactions()
+    if missing or transactions is None:
+        print("\nSkipped demo_cases.joblib: missing required inputs")
+        for path in missing:
+            print(f"  {path}")
+        return None
+
+    customer_features = joblib.load(MODELS / "customer_features.joblib")
+    product_catalogue = pd.read_parquet(DATA / "product_catalogue.parquet")
+    candidates = _demo_candidates(transactions, customer_features, product_catalogue)
+    selected = _select_demo_cases(candidates)
+    records = [_demo_record(row) for _, row in selected.iterrows()]
+
+    out = MODELS / "demo_cases.joblib"
+    out.parent.mkdir(exist_ok=True)
+    joblib.dump(records, out, compress=3)
+
+    risk_counts = selected["risk_tier"].value_counts().to_dict()
+    segment_counts = selected["segment"].value_counts().to_dict()
+    print(f"\nWrote {out} ({out.stat().st_size/1024:.1f} KB)")
+    print(f"  cases: {len(records)}")
+    print(f"  risk tiers: {json.dumps(risk_counts, indent=2)}")
+    print(f"  segments: {json.dumps(segment_counts, indent=2)}")
+    print(f"  anomaly cases: {int(selected['anomaly_flag'].sum())}")
+    return out
+
+
 def build_customer_features() -> Path:
     cf  = pd.read_parquet(DATA / "customer_features.parquet")
     seg = pd.read_parquet(DATA / "customer_segments.parquet")
@@ -448,10 +679,11 @@ def build_customer_features() -> Path:
     return out
 
 
-def build() -> tuple[Path, Path | None]:
+def build() -> tuple[Path, Path | None, Path | None]:
     customer_features = build_customer_features()
     invoice_substitutes = build_invoice_substitutes()
-    return customer_features, invoice_substitutes
+    demo_cases = build_demo_cases()
+    return customer_features, invoice_substitutes, demo_cases
 
 
 if __name__ == "__main__":

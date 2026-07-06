@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 import logging
 import time
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from api import predictor
@@ -26,6 +26,7 @@ from api.schemas import (
     TransactionScoreRequest,
     TransactionScoreResponse,
     CustomerProfileResponse,
+    DemoCasesResponse,
     SubstitutesResponse,
 )
 
@@ -115,7 +116,13 @@ async def log_scoring_latency(request: Request, call_next):
 async def root():
     return {
         "project": "Retail Returns Intelligence",
-        "endpoints": ["/health", "/score", "/customer/{id}/profile", "/substitutes/{invoice_no}"],
+        "endpoints": [
+            "/health",
+            "/demo-cases",
+            "/score",
+            "/customer/{id}/profile",
+            "/substitutes/{invoice_no}",
+        ],
         "docs": "/docs",
     }
 
@@ -143,7 +150,11 @@ async def score_transaction(request: TransactionScoreRequest):
         )
 
     from datetime import datetime
-    is_weekend = int(datetime.now().weekday() >= 5)
+    is_weekend = (
+        request.is_weekend
+        if request.is_weekend is not None
+        else int(datetime.now().weekday() >= 5)
+    )
 
     result = predictor.predict_transaction(
         customer_id=request.customer_id,
@@ -153,8 +164,24 @@ async def score_transaction(request: TransactionScoreRequest):
         unit_price=request.unit_price,
         country=request.country,
         is_weekend=is_weekend,
+        unit_price_z=request.unit_price_z,
+        quantity_z=request.quantity_z,
+        month_end_proximity=request.month_end_proximity,
+        category_return_rate=request.category_return_rate,
     )
     return TransactionScoreResponse(**result)
+
+
+@app.get("/demo-cases", response_model=DemoCasesResponse, tags=["demo"])
+async def demo_cases(
+    filter_key: str = Query(default="any", alias="filter"),
+    q: str = Query(default=""),
+    limit: int = Query(default=160, ge=1, le=500),
+):
+    """Return curated real invoice examples for the live demo."""
+    if not predictor.models_loaded():
+        raise HTTPException(status_code=503, detail="Models not loaded.")
+    return DemoCasesResponse(**predictor.get_demo_cases(filter_key, q, limit))
 
 
 @app.get(

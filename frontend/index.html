@@ -67,47 +67,56 @@
     <section class="faceplate" aria-label="Score a retail transaction">
       <div class="ledger-pane">
         <div class="chips-block">
-          <h2>Known customers, one per segment</h2>
-          <div class="chips" id="sample-chips" aria-label="Known customers">
-            <button type="button" class="chip" data-sample="premium">Premium loyal</button>
-            <button type="button" class="chip" data-sample="healthy">Healthy browser</button>
-            <button type="button" class="chip" data-sample="risk">At risk</button>
-            <button type="button" class="chip" data-sample="returner">Returner</button>
+          <h2>Review real invoices</h2>
+          <div class="chips" id="sample-chips" aria-label="Invoice case filters">
+            <button type="button" class="chip" data-filter="any">Any</button>
+            <button type="button" class="chip" data-filter="low">Low risk</button>
+            <button type="button" class="chip" data-filter="medium">Medium risk</button>
+            <button type="button" class="chip" data-filter="high">High risk</button>
+            <button type="button" class="chip" data-filter="behavior-anomaly">Behavior anomaly</button>
           </div>
         </div>
 
         <form id="score-form" class="ledger" novalidate>
           <label>
             <span>Customer</span>
-            <input id="customer-id" name="customer_id" type="text" autocomplete="off" value="16684.0" />
+            <input id="customer-id" name="customer_id" type="text" autocomplete="off" value="16684.0" readonly />
           </label>
           <label>
             <span>Invoice</span>
-            <input id="invoice-no" name="invoice_no" type="text" autocomplete="off" value="536365" />
+            <input id="invoice-no" name="invoice_no" type="text" autocomplete="off" value="536365" readonly />
           </label>
           <label>
             <span>Stock code</span>
-            <input id="stock-code" name="stock_code" type="text" autocomplete="off" value="85123A" />
+            <input id="stock-code" name="stock_code" type="text" autocomplete="off" value="85123A" readonly />
           </label>
           <label>
             <span>Quantity</span>
-            <input id="quantity" name="quantity" type="number" inputmode="decimal" value="6" />
+            <input id="quantity" name="quantity" type="number" inputmode="decimal" value="6" readonly />
           </label>
           <label>
             <span>Unit price</span>
-            <input id="unit-price" name="unit_price" type="number" inputmode="decimal" step="0.01" value="2.55" />
+            <input id="unit-price" name="unit_price" type="number" inputmode="decimal" step="0.01" value="2.55" readonly />
           </label>
           <label>
             <span>Country</span>
-            <input id="country" name="country" type="text" autocomplete="off" value="United Kingdom" />
+            <input id="country" name="country" type="text" autocomplete="off" value="United Kingdom" readonly />
           </label>
         </form>
+        <p class="case-strip mono" id="case-strip">Invoice 536365 · real invoice sample</p>
 
         <div class="run-controls">
-          <button type="button" class="btn btn-primary" id="known-run">Score a known customer</button>
-          <button type="submit" form="score-form" class="btn btn-secondary" id="manual-run">Enter a transaction</button>
+          <button type="button" class="btn btn-primary" id="known-run">Score a sample invoice</button>
         </div>
-        <p class="helper">Rotates four real customers, one from each segment the model found. Their history prints next to the score.</p>
+        <form id="case-search-form" class="case-search" novalidate>
+          <label>
+            <span>Find invoice or customer</span>
+            <input id="case-search-input" type="search" autocomplete="off" placeholder="invoice, customer, product, segment, risk" aria-controls="case-suggestions" />
+          </label>
+          <button type="submit" class="btn btn-secondary" id="case-search-submit">Find</button>
+          <div class="case-suggestions hidden" id="case-suggestions" role="listbox"></div>
+        </form>
+        <p class="helper">Samples are real invoice lines selected from the dataset. Filters choose the next case pool.</p>
 
         <div class="error-note hidden" id="error-box" role="alert">
           <p id="error-message"></p>
@@ -147,13 +156,6 @@
           </div>
           <div class="history-grid" id="history-grid"></div>
           <p class="history-error hidden" id="history-error"></p>
-          <form id="profile-form" class="profile-lookup" novalidate>
-            <label>
-              <span>Look up any customer</span>
-              <input id="profile-customer-id" type="text" autocomplete="off" />
-            </label>
-            <button type="submit" class="btn btn-secondary">Look up</button>
-          </form>
         </section>
 
         <section class="deflection hidden" id="deflection-section" aria-labelledby="deflection-heading">
@@ -202,7 +204,7 @@
             <li>This runs on a free tier that sleeps between visitors. First start takes 30 to 60 seconds; runs after that are quick.</li>
             <li>No transaction has a return label at the moment it is scored; that label arrives weeks later or never. The history check exists so you can judge the score against the customer's record.</li>
             <li>A high score is a risk estimate about a transaction, not a verdict on a person; the anomaly flag is behavioral, not moral.</li>
-            <li>The four known customers are real records from the dataset, one from each segment the clustering found.</li>
+            <li>The sample button draws from real invoice lines, with filters for risk tier, segment, and behavior anomaly cases.</li>
           </ol>
         </div>
       </details>
