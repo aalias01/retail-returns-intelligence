@@ -39,12 +39,15 @@ jobs:
             exit 1
           fi
 
-          git lfs install
-
           # URL-encode token so special characters do not break git clone.
           HF_TOKEN_ENCODED="$(python3 -c "import os, urllib.parse; print(urllib.parse.quote(os.environ['HF_TOKEN'], safe=''))")"
 
-          git clone "https://alvinalias:${HF_TOKEN_ENCODED}@huggingface.co/spaces/alvinalias/retail-returns-intelligence" /tmp/hf-space
+          git lfs install
+          git config --global credential.helper store
+          printf 'https://alvinalias:%s@huggingface.co\n' "${HF_TOKEN_ENCODED}" > ~/.git-credentials
+
+          # Skip LFS smudge on clone; rsync replaces models from GitHub anyway.
+          GIT_LFS_SKIP_SMUDGE=1 git clone "https://alvinalias:${HF_TOKEN_ENCODED}@huggingface.co/spaces/alvinalias/retail-returns-intelligence" /tmp/hf-space
 
           rsync -av deploy/hf_space/ /tmp/hf-space/ \
             --exclude sync_to_space.sh \
