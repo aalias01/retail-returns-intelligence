@@ -41,7 +41,10 @@ jobs:
 
           git lfs install
 
-          git clone "https://alvinalias:${HF_TOKEN}@huggingface.co/spaces/alvinalias/retail-returns-intelligence" /tmp/hf-space
+          # URL-encode token so special characters do not break git clone.
+          HF_TOKEN_ENCODED="$(python3 -c "import os, urllib.parse; print(urllib.parse.quote(os.environ['HF_TOKEN'], safe=''))")"
+
+          git clone "https://alvinalias:${HF_TOKEN_ENCODED}@huggingface.co/spaces/alvinalias/retail-returns-intelligence" /tmp/hf-space
 
           rsync -av deploy/hf_space/ /tmp/hf-space/ \
             --exclude sync_to_space.sh \
