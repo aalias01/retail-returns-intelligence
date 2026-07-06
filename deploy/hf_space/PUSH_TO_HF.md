@@ -68,8 +68,16 @@ curl -s "https://alvinalias-retail-returns-intelligence.hf.space/demo-cases?limi
 3. Name: `HF_TOKEN` · Value: your HF write token
 4. Push any API change to `main`, or trigger **Sync Retail HF Space** manually from the Actions tab
 
-After the first successful Action run, you can delete the local clone:
+**If sync fails with `HF_TOKEN secret is not set`:** step 2 was skipped. Add the secret, then re-run the workflow.
+
+After the first successful Action run, delete the local clone (optional):
 
 ```bash
 rm -rf ~/retail-returns-hf
 ```
+
+The HF Space repo on huggingface.co is the live deploy target. The local folder was only a manual push vehicle.
+
+## Optional wake strategies
+
+No scheduled wake ping is enabled by default. See [`OPTIONAL_WAKE_STRATEGIES.md`](OPTIONAL_WAKE_STRATEGIES.md) for manual curl, workflow_dispatch, or cron options (including maintenance_nlp pre-wake before outreach).
