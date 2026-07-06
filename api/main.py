@@ -72,7 +72,7 @@ app.add_middleware(
         "http://127.0.0.1:5500",
         "https://returns.alvinalias.com",           # canonical demo (Primary)
         "https://retail-returns-intelligence.vercel.app",  # legacy, 308-redirects to subdomain
-        "https://retail-returns-intelligence-git-hf-space-api-aalias01.vercel.app",  # HF preview branch
+        "https://retail-returns-intelligence-git-hf-space-api-alvinalias.vercel.app",  # HF preview branch
     ],
     allow_credentials=False,
     allow_methods=["GET", "POST"],

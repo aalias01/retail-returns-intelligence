@@ -10,4 +10,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping health endpoint
-        run: curl -fsS https://aalias01-retail-returns-intelligence.hf.space/health
+        run: curl -fsS https://alvin-a-retail-returns-intelligence.hf.space/health

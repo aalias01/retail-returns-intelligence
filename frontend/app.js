@@ -1,4 +1,4 @@
-const API_BASE = "https://aalias01-retail-returns-intelligence.hf.space";
+const API_BASE = "https://alvin-a-retail-returns-intelligence.hf.space";
 const WARMUP_LIMIT_SECONDS = 60;
 const WARMUP_GRACE_MS = 2500;
 const WARMUP_RETIRE_MS = 4000;

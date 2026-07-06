@@ -15,10 +15,10 @@ cd /path/to/retail-returns-intelligence
 bash deploy/hf_space/sync_to_space.sh
 ```
 
-3. Clone the empty Space repo (replace `<hf-username>` if not `aalias01`):
+3. Clone the empty Space repo:
 
 ```bash
-git clone https://huggingface.co/spaces/aalias01/retail-returns-intelligence
+git clone https://huggingface.co/spaces/alvin-a/retail-returns-intelligence
 cd retail-returns-intelligence
 ```
 
@@ -44,14 +44,14 @@ git push
 HF builds automatically. Space URL:
 
 ```text
-https://aalias01-retail-returns-intelligence.hf.space
+https://alvin-a-retail-returns-intelligence.hf.space
 ```
 
 ## Verify
 
 ```bash
-curl -s https://aalias01-retail-returns-intelligence.hf.space/health
-curl -s "https://aalias01-retail-returns-intelligence.hf.space/demo-cases?limit=2"
+curl -s https://alvin-a-retail-returns-intelligence.hf.space/health
+curl -s "https://alvin-a-retail-returns-intelligence.hf.space/demo-cases?limit=2"
 ```
 
 ## After HF is live

@@ -26,8 +26,9 @@ rm -rf "${DEST}/api" "${DEST}/src" "${DEST}/models"
 mkdir -p "${DEST}/models"
 
 cp "${ROOT}/requirements.txt" "${DEST}/requirements.txt"
-cp -R "${ROOT}/api" "${DEST}/api"
-cp -R "${ROOT}/src" "${DEST}/src"
+rsync -a --delete --exclude '__pycache__' --exclude '*.pyc' "${ROOT}/api/" "${DEST}/api/"
+rsync -a --delete --exclude '__pycache__' --exclude '*.pyc' "${ROOT}/src/" "${DEST}/src/"
+cp "${DEST}/.gitignore" "${DEST}/.gitignore" 2>/dev/null || true
 
 for file in "${MODEL_FILES[@]}"; do
   src="${ROOT}/models/${file}"
