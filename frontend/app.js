@@ -294,28 +294,29 @@ function createWarmMeter(element) {
   };
 }
 
-function setShop(shop) {
-  const next = shop === "night" ? "night" : "day";
+function setTheme(theme) {
+  const next = theme === "night" ? "night" : "day";
+  const mode = next === "night" ? "dark" : "light";
   document.documentElement.setAttribute("data-theme", next);
-  document.cookie = `shop=${encodeURIComponent(next)}; Domain=.alvinalias.com; Path=/; Max-Age=31536000; SameSite=Lax`;
-  try { localStorage.setItem("shop", next); } catch (error) {}
+  document.cookie = `mode=${encodeURIComponent(mode)}; Domain=.alvinalias.com; Path=/; Max-Age=31536000; SameSite=Lax`;
+  try { localStorage.setItem("mode", mode); } catch (error) {}
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute("content", next === "night" ? "#201f1c" : "#f5f4ef");
-  const toggle = $("shop-toggle");
+  const toggle = $("mode-toggle");
   if (toggle) {
     toggle.setAttribute("aria-pressed", next === "night" ? "true" : "false");
-    toggle.setAttribute("aria-label", next === "night" ? "Use day shop" : "Use night shop");
+    toggle.setAttribute("aria-label", next === "night" ? "Switch to light mode" : "Switch to dark mode");
   }
 }
 
-function currentShop() {
+function currentTheme() {
   return document.documentElement.getAttribute("data-theme") === "night" ? "night" : "day";
 }
 
-$("shop-toggle")?.addEventListener("click", () => {
-  setShop(currentShop() === "night" ? "day" : "night");
+$("mode-toggle")?.addEventListener("click", () => {
+  setTheme(currentTheme() === "night" ? "day" : "night");
 });
-setShop(currentShop());
+setTheme(currentTheme());
 
 function renderScale(value = null) {
   const width = 720;

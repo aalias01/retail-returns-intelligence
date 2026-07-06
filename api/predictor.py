@@ -53,21 +53,41 @@ def load_all_models() -> None:
 
     _models["shap_explainer"] = shap.TreeExplainer(_models["classifier"])
 
-    # Recommender artifacts
-    emb_path = MODELS_DIR / "product_embeddings.npy"
-    if emb_path.exists():
-        _models["product_embeddings"] = np.load(emb_path)
-        _models["embedding_stock_codes"] = joblib.load(
-            MODELS_DIR / "embedding_stock_codes.joblib"
-        )
-        _models["als_model"] = joblib.load(MODELS_DIR / "als_model.joblib")
-        _models["als_product_index"] = joblib.load(
-            MODELS_DIR / "als_product_index.joblib"
-        )
-
+    # Live substitutes come from a compact lookup so deployment does not need
+    # the heavier optional ALS runtime dependency.
     substitutes_path = MODELS_DIR / "invoice_substitutes.joblib"
     if substitutes_path.exists():
         _models["invoice_substitutes"] = joblib.load(substitutes_path)
+
+    # Legacy recommender artifacts are optional. Older deployments may still
+    # contain them, but `als_model.joblib` needs the `implicit` package when
+    # unpickled. Do not let that optional bundle block API startup.
+    emb_path = MODELS_DIR / "product_embeddings.npy"
+    legacy_paths = [
+        emb_path,
+        MODELS_DIR / "embedding_stock_codes.joblib",
+        MODELS_DIR / "als_model.joblib",
+        MODELS_DIR / "als_product_index.joblib",
+    ]
+    if all(path.exists() for path in legacy_paths):
+        try:
+            _models["product_embeddings"] = np.load(emb_path)
+            _models["embedding_stock_codes"] = joblib.load(
+                MODELS_DIR / "embedding_stock_codes.joblib"
+            )
+            _models["als_model"] = joblib.load(MODELS_DIR / "als_model.joblib")
+            _models["als_product_index"] = joblib.load(
+                MODELS_DIR / "als_product_index.joblib"
+            )
+        except ModuleNotFoundError as exc:
+            for key in [
+                "product_embeddings",
+                "embedding_stock_codes",
+                "als_model",
+                "als_product_index",
+            ]:
+                _models.pop(key, None)
+            print(f"WARNING: Skipping optional ALS recommender artifacts: {exc}")
 
 
 def models_loaded() -> bool:

@@ -16,13 +16,13 @@
         var found = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
         return found ? decodeURIComponent(found[1]) : "";
       }
-      var stored = readCookie("shop");
-      try { stored = stored || localStorage.getItem("shop") || ""; } catch (error) {}
+      var stored = readCookie("mode");
+      try { stored = stored || localStorage.getItem("mode") || ""; } catch (error) {}
       var preferred = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "night" : "day";
-      var shop = stored === "day" || stored === "night" ? stored : preferred;
-      document.documentElement.setAttribute("data-theme", shop);
+      var theme = stored === "dark" ? "night" : stored === "light" ? "day" : preferred;
+      document.documentElement.setAttribute("data-theme", theme);
       var meta = document.querySelector('meta[name="theme-color"]');
-      if (meta) meta.setAttribute("content", shop === "night" ? "#201f1c" : "#f5f4ef");
+      if (meta) meta.setAttribute("content", theme === "night" ? "#201f1c" : "#f5f4ef");
     })();
   </script>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -59,13 +59,13 @@
       <span class="series mono">AA-2026-02</span>
     </nav>
 
-    <button class="shop-toggle" id="shop-toggle" type="button" aria-label="Use night shop" aria-pressed="false">
-      <svg class="shop-icon shop-day" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true">
+    <button class="mode-toggle" id="mode-toggle" type="button" aria-label="Switch to dark mode" aria-pressed="false">
+      <svg class="mode-icon mode-day" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true">
         <circle cx="12" cy="12" r="4"></circle>
         <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"></path>
       </svg>
-      <span class="shop-track" aria-hidden="true"><span class="shop-knob"></span></span>
-      <svg class="shop-icon shop-night" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true">
+      <span class="mode-track" aria-hidden="true"><span class="mode-knob"></span></span>
+      <svg class="mode-icon mode-night" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true">
         <path d="M20 14.5A8 8 0 0 1 9.5 4 7 7 0 1 0 20 14.5z"></path>
       </svg>
     </button>
