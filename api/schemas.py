@@ -43,7 +43,7 @@ class TransactionScoreResponse(BaseModel):
     return_probability: float = Field(..., ge=0.0, le=1.0)
     risk_tier: str = Field(..., description="High / Medium / Low based on threshold")
     segment: str = Field(..., description="Customer segment: Premium Loyal / Healthy Browser / At-Risk / Returner")
-    anomaly_flag: int = Field(..., description="1 = customer flagged as excessive returner")
+    anomaly_flag: int = Field(..., description="1 = customer flagged by the behavior anomaly detector")
     anomaly_score: float = Field(..., description="Isolation Forest decision score (lower = more anomalous)")
     top_shap_factors: list[ShapEntry]
 

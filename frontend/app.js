@@ -148,6 +148,15 @@ function renderWarmMeter(element, displaySeconds, label, markerSeconds = display
 }
 
 function createWarmMeter(element) {
+  if (!element) {
+    return {
+      start() {},
+      markReady() {},
+      cancel() {},
+      snapshot() {},
+    };
+  }
+
   let startedAt = 0;
   let visible = false;
   let complete = false;

@@ -438,37 +438,6 @@ main {
   font-size: 13px;
 }
 
-.warm-meter-compact {
-  width: min(430px, 100%);
-  margin-top: 8px;
-  padding-top: 7px;
-  border-top: 1px solid var(--hairline);
-}
-
-.warm-meter-compact .warm-meter-top {
-  gap: 12px;
-}
-
-.warm-meter-compact .warm-meter-number {
-  font-size: 26px;
-}
-
-.warm-meter-compact .warm-meter-label {
-  font-size: 12.5px;
-}
-
-.warm-meter-compact .warm-meter-scale {
-  margin-top: 4px;
-}
-
-.warm-meter-compact .warm-scale {
-  height: 56px;
-}
-
-.warm-meter-compact .warm-meter-log {
-  font-size: 11px;
-}
-
 .warm-meter-full {
   margin-bottom: 22px;
   padding-bottom: 22px;
@@ -935,8 +904,7 @@ details[open] summary::after {
     text-align: left;
   }
 
-  .warm-meter-top,
-  .warm-meter-compact .warm-meter-top {
+  .warm-meter-top {
     grid-template-columns: 1fr;
     gap: 4px;
   }

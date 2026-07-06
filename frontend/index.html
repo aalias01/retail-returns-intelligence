@@ -37,14 +37,6 @@
       <p>Scores a transaction's return likelihood before the refund. Built by Alvin Alias.</p>
       <div class="status-stack">
         <p class="status-line mono" id="status-line">server waking, first score can take a minute</p>
-        <div class="warm-meter warm-meter-compact hidden" id="health-warm-meter" role="status" aria-live="polite">
-          <div class="warm-meter-top">
-            <p class="warm-meter-number mono" data-warm-number>60</p>
-            <p class="warm-meter-label" data-warm-label>estimated seconds to warm</p>
-          </div>
-          <div class="warm-meter-scale" data-warm-scale></div>
-          <p class="warm-meter-log mono" data-warm-log>&gt; warm-up estimate counting · this is an estimate, not progress</p>
-        </div>
       </div>
     </div>
 
@@ -142,7 +134,7 @@
             <div>
               <p class="reading-label">return probability</p>
               <p class="tier-line" id="tier-line">--</p>
-              <p class="anomaly-line hidden" id="anomaly-line">flagged as an excessive returner</p>
+              <p class="anomaly-line hidden" id="anomaly-line">behavior anomaly flag · history is unusual</p>
             </div>
           </div>
           <div class="scale-wrap" id="scale-wrap" aria-label="Return probability scale"></div>
