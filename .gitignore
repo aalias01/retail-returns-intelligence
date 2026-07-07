@@ -74,9 +74,3 @@ mlflow/mlruns/
 
 # Prefect local storage
 .prefect/
-
-# HF Space staging: sync_to_space.sh copies serving files locally; do not commit duplicates
-deploy/hf_space/api/
-deploy/hf_space/src/
-deploy/hf_space/models/
-deploy/hf_space/requirements.txt
