@@ -66,57 +66,63 @@
   <main>
     <section class="faceplate" aria-label="Score a retail transaction">
       <div class="ledger-pane">
-        <div class="chips-block">
-          <h2>Review real invoices</h2>
-          <div class="chips" id="sample-chips" aria-label="Invoice case filters">
-            <button type="button" class="chip" data-filter="any">Any</button>
-            <button type="button" class="chip" data-filter="low">Low risk</button>
-            <button type="button" class="chip" data-filter="medium">Medium risk</button>
-            <button type="button" class="chip" data-filter="high">High risk</button>
-            <button type="button" class="chip" data-filter="behavior-anomaly">Behavior anomaly</button>
-          </div>
-        </div>
-
-        <form id="score-form" class="ledger" novalidate>
-          <label>
-            <span>Customer</span>
-            <input id="customer-id" name="customer_id" type="text" autocomplete="off" value="16684.0" readonly />
-          </label>
-          <label>
-            <span>Invoice</span>
-            <input id="invoice-no" name="invoice_no" type="text" autocomplete="off" value="536365" readonly />
-          </label>
-          <label>
-            <span>Stock code</span>
-            <input id="stock-code" name="stock_code" type="text" autocomplete="off" value="85123A" readonly />
-          </label>
-          <label>
-            <span>Quantity</span>
-            <input id="quantity" name="quantity" type="number" inputmode="decimal" value="6" readonly />
-          </label>
-          <label>
-            <span>Unit price</span>
-            <input id="unit-price" name="unit_price" type="number" inputmode="decimal" step="0.01" value="2.55" readonly />
-          </label>
-          <label>
-            <span>Country</span>
-            <input id="country" name="country" type="text" autocomplete="off" value="United Kingdom" readonly />
-          </label>
-        </form>
-        <p class="case-strip mono" id="case-strip">Invoice 536365 · real invoice sample</p>
-
         <div class="run-controls">
           <button type="button" class="btn btn-primary" id="known-run">Score a sample invoice</button>
         </div>
-        <form id="case-search-form" class="case-search" novalidate>
-          <label>
-            <span>Find invoice or customer</span>
-            <input id="case-search-input" type="search" autocomplete="off" placeholder="invoice, customer, product, segment, risk" aria-controls="case-suggestions" />
-          </label>
-          <button type="submit" class="btn btn-secondary" id="case-search-submit">Find</button>
-          <div class="case-suggestions hidden" id="case-suggestions" role="listbox"></div>
-        </form>
-        <p class="helper">Samples are real invoice lines selected from the dataset. Filters choose the next case pool.</p>
+
+        <details class="mobile-disclosure" data-mobile-disclosure open>
+          <summary>Choose an invoice or filter</summary>
+          <div class="mobile-disclosure__body">
+            <div class="chips-block">
+              <h2>Review real invoices</h2>
+              <div class="chips" id="sample-chips" aria-label="Invoice case filters">
+                <button type="button" class="chip" data-filter="any">Any</button>
+                <button type="button" class="chip" data-filter="low">Low risk</button>
+                <button type="button" class="chip" data-filter="medium">Medium risk</button>
+                <button type="button" class="chip" data-filter="high">High risk</button>
+                <button type="button" class="chip" data-filter="behavior-anomaly">Behavior anomaly</button>
+              </div>
+            </div>
+
+            <form id="score-form" class="ledger" novalidate>
+              <label>
+                <span>Customer</span>
+                <input id="customer-id" name="customer_id" type="text" autocomplete="off" value="16684.0" readonly />
+              </label>
+              <label>
+                <span>Invoice</span>
+                <input id="invoice-no" name="invoice_no" type="text" autocomplete="off" value="536365" readonly />
+              </label>
+              <label>
+                <span>Stock code</span>
+                <input id="stock-code" name="stock_code" type="text" autocomplete="off" value="85123A" readonly />
+              </label>
+              <label>
+                <span>Quantity</span>
+                <input id="quantity" name="quantity" type="number" inputmode="decimal" value="6" readonly />
+              </label>
+              <label>
+                <span>Unit price</span>
+                <input id="unit-price" name="unit_price" type="number" inputmode="decimal" step="0.01" value="2.55" readonly />
+              </label>
+              <label>
+                <span>Country</span>
+                <input id="country" name="country" type="text" autocomplete="off" value="United Kingdom" readonly />
+              </label>
+            </form>
+            <p class="case-strip mono" id="case-strip">Invoice 536365 · real invoice sample</p>
+
+            <form id="case-search-form" class="case-search" novalidate>
+              <label>
+                <span>Find invoice or customer</span>
+                <input id="case-search-input" type="search" autocomplete="off" placeholder="invoice, customer, product, segment, risk" aria-controls="case-suggestions" />
+              </label>
+              <button type="submit" class="btn btn-secondary" id="case-search-submit">Find</button>
+              <div class="case-suggestions hidden" id="case-suggestions" role="listbox"></div>
+            </form>
+            <p class="helper">Samples are real invoice lines selected from the dataset. Filters choose the next case pool.</p>
+          </div>
+        </details>
 
         <div class="error-note hidden" id="error-box" role="alert">
           <p id="error-message"></p>
@@ -149,25 +155,34 @@
           <div class="scale-wrap" id="scale-wrap" aria-label="Return probability scale"></div>
         </section>
 
-        <section class="history-check" aria-labelledby="history-heading">
-          <div class="section-heading">
-            <h2 id="history-heading">History check · what this customer has actually done</h2>
-            <p class="mono" id="anomaly-score-line"></p>
-          </div>
-          <div class="history-grid" id="history-grid"></div>
-          <p class="history-error hidden" id="history-error"></p>
-        </section>
+        <details class="history-check mobile-disclosure" data-mobile-disclosure open>
+          <summary>Customer history check</summary>
+          <section class="mobile-disclosure__body" aria-labelledby="history-heading">
+            <div class="section-heading">
+              <h2 id="history-heading">History check · what this customer has actually done</h2>
+              <p class="mono" id="anomaly-score-line"></p>
+            </div>
+            <div class="history-grid" id="history-grid"></div>
+            <p class="history-error hidden" id="history-error"></p>
+          </section>
+        </details>
 
-        <section class="deflection hidden" id="deflection-section" aria-labelledby="deflection-heading">
-          <h2 id="deflection-heading">What moved this score</h2>
-          <div class="deflection-table" id="deflection-table"></div>
-        </section>
+        <details class="deflection mobile-disclosure hidden" id="deflection-section" data-mobile-disclosure open>
+          <summary>What moved this score</summary>
+          <section class="mobile-disclosure__body" aria-labelledby="deflection-heading">
+            <h2 id="deflection-heading">What moved this score</h2>
+            <div class="deflection-table" id="deflection-table"></div>
+          </section>
+        </details>
 
-        <section class="substitutes hidden" id="substitutes-section" aria-labelledby="substitutes-heading">
-          <h2 id="substitutes-heading">If this comes back · substitutes worth offering</h2>
-          <p class="original-line mono hidden" id="original-line"></p>
-          <div class="substitute-list" id="substitute-list"></div>
-        </section>
+        <details class="substitutes mobile-disclosure hidden" id="substitutes-section" data-mobile-disclosure open>
+          <summary>Substitutes worth offering</summary>
+          <section class="mobile-disclosure__body" aria-labelledby="substitutes-heading">
+            <h2 id="substitutes-heading">If this comes back · substitutes worth offering</h2>
+            <p class="original-line mono hidden" id="original-line"></p>
+            <div class="substitute-list" id="substitute-list"></div>
+          </section>
+        </details>
       </div>
     </section>
 
@@ -215,6 +230,7 @@
     <p>Built by Alvin Alias · 2026 · AA-2026-02 · <a href="https://github.com/aalias01/retail-returns-intelligence" target="_blank" rel="noopener">GitHub</a> · <a href="https://alvinalias-portfolio-ml-api.hf.space/retail/docs" target="_blank" rel="noopener">API docs</a></p>
   </footer>
 
+  <script src="mobile-disclosures.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
