@@ -10,7 +10,7 @@ Predicts return risk at transaction time and flags excessive returners, trained 
 [![CI](https://github.com/aalias01/retail-returns-intelligence/actions/workflows/ci.yml/badge.svg)](https://github.com/aalias01/retail-returns-intelligence/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-22c55e)](LICENSE)
 
-**[Live demo](https://returns.alvinalias.com)** | **[API docs](https://retail-returns-api.onrender.com/docs)**
+**[Live demo](https://returns.alvinalias.com)** | **[API docs](https://alvinalias-portfolio-ml-api.hf.space/retail/docs)**
 
 ## Why
 
@@ -63,11 +63,11 @@ frontend/app.js  ->  GET  /demo-cases     ->  curated invoice case lookup
 Prefect (weekly)  ->  ingest -> features -> train -> score  ->  MLflow (all runs tracked)
 ```
 
-Frontend is a static ledger-desk page on Vercel. It pulls curated real invoice lines from `/demo-cases`, lets visitors filter by risk tier, segment, or behavior anomaly, then sends the selected invoice through the same `/score` path the API exposes. The ledger fields are locked on purpose because each sample carries real transaction context such as `unit_price_z`, `quantity_z`, `is_weekend`, and category return rate. `/customer/{id}/profile` prints the history check beside the probability scale, and high-risk or substitute-ready invoices call `/substitutes/{invoice_no}`. API is FastAPI on Render. Shared feature and model logic lives in `src/`.
+Frontend is a static ledger-desk page on Vercel. It pulls curated real invoice lines from `/demo-cases`, lets visitors filter by risk tier, segment, or behavior anomaly, then sends the selected invoice through the same `/score` path the API exposes. The ledger fields are locked on purpose because each sample carries real transaction context such as `unit_price_z`, `quantity_z`, `is_weekend`, and category return rate. `/customer/{id}/profile` prints the history check beside the probability scale, and high-risk or substitute-ready invoices call `/substitutes/{invoice_no}`. The FastAPI backend is mounted at `/retail` in the shared Hugging Face Docker Space. Shared feature and model logic lives in `src/`.
 
 ## Tech stack
 
-Python 3.11, Pandas, NumPy, LightGBM 4.0+ (primary classifier), XGBoost 2.0+ (comparison), scikit-learn (Isolation Forest, LOF, KMeans), sentence-transformers + implicit ALS (recommender), SHAP TreeExplainer, scipy/statsmodels (A/B testing), DuckDB (SQL feature work), PySpark on Databricks Free Edition, MLflow 2.10+, Prefect 2.x, FastAPI on Render, vanilla JS frontend on Vercel. Full pins in `environment.yml` (local, conda) and `requirements.txt` (deployment, pip).
+Python 3.11, Pandas, NumPy, LightGBM 4.0+ (primary classifier), XGBoost 2.0+ (comparison), scikit-learn (Isolation Forest, LOF, KMeans), sentence-transformers + implicit ALS (recommender), SHAP TreeExplainer, scipy/statsmodels (A/B testing), DuckDB (SQL feature work), PySpark on Databricks Free Edition, MLflow 2.10+, Prefect 2.x, FastAPI on a shared Hugging Face Docker Space, vanilla JS frontend on Vercel. Full pins are in `environment.yml` for local conda work and `requirements.txt` for pip serving.
 
 ## Run it locally
 
@@ -127,11 +127,11 @@ Tests that need missing artifacts skip instead of failing. The suite covers `/he
 - The live API serves precomputed customer features from `models/customer_features.joblib` and curated demo invoices from `models/demo_cases.joblib`. Production would join against a feature store and a transaction store.
 - Manual API calls can omit `unit_price_z`, `quantity_z`, and `month_end_proximity`; the API then uses neutral defaults. The frontend demo uses curated invoice cases because those fields are already known for real historical rows.
 - The A/B test is a simulation against held-out historical behavior, not a live randomized experiment.
-- The API runs on Render's free tier, so the first request after idle can take around a minute to cold-start.
+- The shared Hugging Face CPU Space sleeps after extended inactivity; the first request to this route can take a moment while the service wakes and loads its models.
 
 ## Deployment
 
-Render reads `render.yaml` (New + > Blueprint > connect the repo). Manual fallback: build with `pip install -r requirements.txt`, start with `uvicorn api.main:app --host 0.0.0.0 --port $PORT`, health check `/health`. Frontend: import the repo on Vercel, root directory `frontend/`, no build step. Set `API_BASE` in `app.js` to the Render URL, then add the Vercel URL to `allow_origins` in `api/main.py`.
+From the portfolio workspace, run `bash portfolio_ml_api/scripts/sync_from_portfolio.sh`, commit the changes in `portfolio_ml_api`, and push its `main` branch. GitHub Actions deploys the shared Hugging Face Docker Space. This service is mounted at `/retail`. Vercel serves `frontend/` at the live demo URL.
 
 ## Project structure
 

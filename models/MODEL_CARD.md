@@ -26,7 +26,7 @@ One caveat matters: the Returner segment is roughly 18 wholesale-like accounts w
 
 ## Recommender
 
-The substitute recommender uses product-description embeddings plus ALS artifacts built offline. The published evaluation is Recall@10 0.093 and NDCG@10 0.046. For API serving, `scripts/build_api_artifacts.py` precomputes `models/invoice_substitutes.joblib` so Render can serve invoice lookups without loading recommender training libraries.
+The substitute recommender uses product-description embeddings plus ALS artifacts built offline. The published evaluation is Recall@10 0.093 and NDCG@10 0.046. For API serving, `scripts/build_api_artifacts.py` precomputes `models/invoice_substitutes.joblib` so the deployed API can serve invoice lookups without loading recommender training libraries.
 
 The current lookup rationale is content-only when served from the precomputed artifact. It reports content similarity, catalogue return rate, and whether the candidate appears in that customer's return history.
 
